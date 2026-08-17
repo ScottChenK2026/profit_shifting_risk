@@ -1,0 +1,16 @@
+# Profit-shifting risk detection - pinned dependencies
+# Install with:  pip install -r requirements.txt
+#
+# Note on PyTorch: the default PyPI wheel works on most machines. On Linux/ARM
+# or for a guaranteed CPU-only build, install from the official index:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+numpy>=1.24
+pandas>=1.5
+scikit-learn>=1.3
+xgboost>=2.0
+torch>=2.2
+shap>=0.44
+matplotlib>=3.7
+seaborn>=0.12
+pytest>=7.4
