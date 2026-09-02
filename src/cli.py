@@ -1,12 +1,11 @@
 """
 cli.py
 ------
-The little command-line tool that puts the trained model to use. The pipeline
-does all the heavy lifting and leaves the trained MLP, the fitted scaler and the
-training medians sitting in ``outputs/models``; this script just loads them back
-and scores whatever record you hand it - either typed in as numbers on the
-command line, or a whole CSV of records. You get back a risk score between 0 and
-1 and a friendlier HIGH/MEDIUM/LOW band on top of it.
+The little command-line tool that puts the trained model to use. The pipeline does the heavy
+lifting and leaves the trained MLP, the fitted scaler and the training medians in
+``outputs/models``; this script loads them back and scores whatever record you hand it, either
+typed in as numbers on the command line or as a whole CSV. What comes back is a risk score between
+0 and 1, with a friendlier HIGH/MEDIUM/LOW band on top of it.
 
 Examples
 --------
@@ -28,12 +27,12 @@ import pickle
 import sys
 from pathlib import Path
 
-# Allow the module to run both as ``python -m src.cli`` and ``python src/cli.py``.
-# config.py lives in the project root; the other modules live in src/, and both
-# use flat imports - so put both directories on the path.
+# This needs to run both as ``python -m src.cli`` and as ``python src/cli.py``. config.py lives in
+# the project root, the other modules live in src/, and both use flat imports - so both directories
+# go on the path.
 _SRC_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SRC_DIR))            # src/
-sys.path.insert(0, str(_SRC_DIR.parent))     # project root (config.py)
+sys.path.insert(0, str(_SRC_DIR.parent))     # project root, where config.py is
 
 import numpy as np
 import pandas as pd
@@ -45,8 +44,8 @@ from models.mlp import ProfitShiftingMLP
 
 
 def _band(score: float) -> str:
-    # Turn the raw score into a plain HIGH/MEDIUM/LOW label - easier for someone
-    # to act on than a bare number. The cut-offs are judgement calls, not learned.
+    # A plain HIGH/MEDIUM/LOW label is easier for someone to act on than a bare number. The
+    # cut-offs are my judgement calls, not something the model learned.
     if score >= 0.70:
         return "HIGH"
     if score >= 0.40:
@@ -55,9 +54,8 @@ def _band(score: float) -> str:
 
 
 def load_artifacts() -> tuple[ProfitShiftingMLP, object, pd.Series]:
-    """Pull back everything the pipeline saved - the trained MLP, the scaler and
-    the imputation medians - so new records get the exact same treatment training did.
-    """
+    """Pull back everything the pipeline saved - the trained MLP, the scaler, the imputation
+    medians - so that new records get exactly the same treatment the training data did."""
     with open(MODEL_DIR / "scaler.pkl", "rb") as fh:
         scaler = pickle.load(fh)
     with open(MODEL_DIR / "medians.pkl", "rb") as fh:
@@ -70,13 +68,11 @@ def load_artifacts() -> tuple[ProfitShiftingMLP, object, pd.Series]:
 
 
 def score_frame(df_raw: pd.DataFrame, model, scaler, medians) -> pd.DataFrame:
-    """Take raw CbCR rows, run them through the same feature/scale/impute steps
-    as training, and return each row with a risk score and band attached.
-    """
-    # Feature engineering copes fine with missing raw columns - they just turn
-    # into NaN and get filled with the training medians. The one thing it insists
-    # on is a haven flag, but here it's only there to satisfy the label column;
-    # it's a neutral 0 and is NOT fed to the model as a feature.
+    """Take raw CbCR rows, run them through the same feature, imputation and scaling steps as
+    training, and return each row with a risk score and band attached."""
+    # Feature engineering copes fine with missing raw columns - they turn into NaN and get filled
+    # with the training medians. The one thing it insists on is a haven flag, and here that exists
+    # only to satisfy the label column. It is a neutral 0 and is never fed to the model.
     df = df_raw.copy()
     if "is_known_haven" not in df.columns:
         df["is_known_haven"] = 0
@@ -96,12 +92,10 @@ def score_frame(df_raw: pd.DataFrame, model, scaler, medians) -> pd.DataFrame:
 
 
 def build_single_record(args: argparse.Namespace) -> pd.DataFrame:
-    """Build a single-row CbCR frame out of the numbers passed on the command
-    line. Only the core financials are really needed; the activity-mix and panel
-    fields fall back to the optional flags, or are just left blank and imputed.
-    A few fields (e.g. accumulated earnings) are rough stand-ins so the feature
-    engineering has something to work with for a one-off lookup.
-    """
+    """Build a one-row CbCR frame out of the numbers passed on the command line. Only the core
+    financials really matter; the activity-mix and panel fields fall back to the optional flags, or
+    are left blank and imputed. A couple of fields, accumulated earnings for instance, are rough
+    stand-ins so the feature engineering has something to work with for a one-off lookup."""
     return pd.DataFrame([{
         "reporting_jurisdiction": "CLI",
         "partner_jurisdiction": "CLI",
@@ -155,8 +149,8 @@ def main() -> None:
     if args.csv:
         df_raw = pd.read_csv(args.csv)
         from data_generation import add_supplementary_columns
-        # The haven flag is only needed so feature engineering has a label
-        # column to fill; it is never given to the model as an input.
+        # Again, the haven flag is only there so feature engineering has a label column to fill. It
+        # is never given to the model as an input.
         if "is_known_haven" not in df_raw.columns:
             df_raw = add_supplementary_columns(df_raw)
         scored = score_frame(df_raw, model, scaler, medians)

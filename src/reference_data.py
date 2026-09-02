@@ -1,42 +1,40 @@
 """
 reference_data.py
 -----------------
-This is the "lookup tables" file. It holds two kinds of outside knowledge:
-the list of countries I'm treating as tax havens (used to build the answer the
-model tries to predict), and the mapping from OECD's cryptic measure codes to
-readable column names. Crucially, none of this comes from the companies' own
-reported numbers, so using it to define the answer doesn't accidentally hand
-the model the answer through the inputs (that would be leakage).
+The lookup tables. Two kinds of outside knowledge live here: the list of countries I treat as tax
+havens, which is used to build the answer the model tries to predict, and the mapping from OECD's
+rather cryptic measure codes to readable column names. None of it comes from the companies' own
+reported numbers, which is the point - defining the answer this way cannot accidentally hand the
+model that answer through the inputs.
 
-About the tax-haven list
-------------------------
-A "tax haven" here just means a country widely used to book profits where very
-little tax gets paid. There's no single official list everyone agrees on, so
-what I use is a best-effort stand-in (a proxy): a country counts as a haven if
-it shows up on the well-known lists. I combined a few sources to be reasonably
-comprehensive:
-  * the EU's own lists of "non-cooperative" countries (the blacklist and the
-    watch/"grey" list);
-  * the countries near the top of the Tax Justice Network's secrecy and
-    corporate-tax-haven rankings;
-  * the offshore financial centres flagged by Garcia-Bernardo et al. (2017),
-    "Uncovering Offshore Financial Centers" - both the end destinations
-    ("sinks") and the big pass-through hubs ("conduits").
+About the haven list
+--------------------
+A tax haven here just means a country widely used to book profits where very little tax is paid.
+No single official list exists that everyone agrees on, so what I use is a best-effort proxy: a
+country counts as a haven if it turns up on the well-known lists. I combined three sources to get
+reasonable coverage:
 
-It's an approximation, not gospel, and I talk about where it falls short in the
-write-up. The codes are ISO-3166 three-letter country codes (e.g. "LUX" for
-Luxembourg) so they line up with how the OECD data labels countries.
+  * the EU's lists of non-cooperative jurisdictions, both the blacklist and the grey watch list;
+  * the countries near the top of the Tax Justice Network's secrecy and corporate-tax-haven
+    rankings;
+  * the offshore financial centres identified by Garcia-Bernardo et al. (2017), "Uncovering
+    Offshore Financial Centers", covering both the end destinations they call sinks and the big
+    pass-through conduits.
+
+It is an approximation and I am upfront about that in the write-up, where I also discuss what it
+gets wrong. Codes are ISO-3166 three-letter country codes (LUX for Luxembourg, and so on) so they
+line up with the way the OECD data labels countries.
 """
 
 from __future__ import annotations
 
-# --- The haven list itself (three-letter country codes) ------------------- #
-# Grouped roughly by region just to make it easier to scan and check by eye.
+# --- The haven list itself, as three-letter country codes ----------------- #
+# Grouped roughly by region, only so it is easier to scan and check by eye.
 TAX_HAVENS: set[str] = {
     # Caribbean / Atlantic
     "AIA", "ATG", "ABW", "BHS", "BRB", "BLZ", "BMU", "VGB", "CYM", "CUW",
     "DMA", "GRD", "MSR", "KNA", "LCA", "VCT", "SXM", "TCA", "ANT",
-    # Europe (incl. major conduits)
+    # Europe, including the major conduits
     "AND", "CYP", "GIB", "GGY", "IRL", "IMN", "JEY", "LIE", "LUX", "MLT",
     "MCO", "NLD", "SMR", "CHE",
     # Asia / Pacific / Middle East / Africa / Indian Ocean
@@ -45,14 +43,12 @@ TAX_HAVENS: set[str] = {
 }
 
 # --- What the local offices actually do ----------------------------------- #
-# The OECD also reports how many establishments (offices/entities) in each
-# country mainly do each kind of activity. This is gold for us: some types are
-# classic "paper office" setups - a holding company that just owns shares, an
-# entity that only lends money around the group, one that just holds patents
-# and collects royalties, or a dormant shell that does nothing - and these tend
-# to cluster where profit is being shifted. Others (factories, sales, R&D) are
-# signs of real business happening on the ground. The left side is OECD's code,
-# the right is the friendlier name I use everywhere else.
+# The OECD also reports how many establishments in each country mainly do each kind of activity,
+# and for this project that is gold. Some types are the classic paper-office setup: a holding
+# company that only owns shares, an entity that only lends money around the group, one that holds
+# patents and collects royalties, a dormant shell that does nothing at all. Those cluster where
+# profit is being shifted. Others - factories, sales, R&D - mean real business is happening on the
+# ground. OECD's code on the left, the friendlier name I use everywhere else on the right.
 ACTIVITY_CODES: dict[str, str] = {
     "ACT_RD": "research_development",
     "ACT_HOLDING": "holding_equity",
@@ -69,9 +65,8 @@ ACTIVITY_CODES: dict[str, str] = {
     "ACT_OTHER": "other_activity",
 }
 
-# Splitting the activity types into the two buckets above: the "paper office"
-# kinds that often go hand-in-hand with shifting, versus the ones that mean
-# actual operations are happening locally.
+# The two buckets those activity types fall into: the paper-office kinds that tend to go with
+# shifting, and the ones that mean actual operations are happening locally.
 SHIFTING_PRONE_ACTIVITIES = [
     "holding_equity", "ip_management", "internal_group_finance", "dormant",
 ]
@@ -81,9 +76,8 @@ REAL_ACTIVITIES = [
 ]
 
 # --- The money and headcount figures -------------------------------------- #
-# Same idea as the activity map above, but for the financial numbers and counts
-# (revenue, profit, tax, employees, and so on). OECD's code on the left, my
-# column name on the right.
+# Same idea as the activity map, but for the financial numbers and the counts: revenue, profit,
+# tax, employees. OECD's code on the left, my column name on the right.
 FINANCIAL_CODES: dict[str, str] = {
     "TOT_REV": "total_revenues",
     "RPR": "related_party_revenues",
@@ -101,9 +95,9 @@ FINANCIAL_CODES: dict[str, str] = {
     "ENTITIES_COUNT": "num_entities",
 }
 
-# Some "counterpart" codes in the data aren't actual countries - they're
-# roll-ups like "rest of world", regional totals, or stateless/unknown. We need
-# to drop these so we don't compare a real country against a regional bucket.
+# Some counterpart codes in the data are not countries at all - they are roll-ups like "rest of
+# world", regional totals, or stateless and unknown. They have to go, otherwise we would end up
+# comparing a real country against a regional bucket.
 COUNTERPART_AGGREGATES: set[str] = {
     "W", "E", "A", "S", "F", "W_O", "E_O", "A_O", "S_O", "F_O",
     "STLS", "ANT_F", "FJT", "WLD", "_T", "ZZZ",
@@ -111,8 +105,8 @@ COUNTERPART_AGGREGATES: set[str] = {
 
 
 def is_real_jurisdiction(code: str) -> bool:
-    """Quick check for whether a counterpart code looks like a genuine single
-    country rather than one of those aggregate buckets. A real one is three
-    capital letters (like "FRA") and isn't in the exclude list above."""
+    """Does this counterpart code look like a genuine single country rather than one of the
+    aggregate buckets? A real one is three capital letters, like "FRA", and is not on the exclude
+    list above."""
     return (isinstance(code, str) and len(code) == 3 and code.isalpha()
             and code.upper() == code and code not in COUNTERPART_AGGREGATES)

@@ -1,24 +1,22 @@
 """
 models/autoencoder.py
 ---------------------
-An autoencoder used for anomaly detection -- a different angle on the problem
-that doesn't rely on the labels at all.
+An autoencoder used for anomaly detection, which is a different angle on the problem: it does not
+rely on the labels at all.
 
-An autoencoder is a network that learns to squeeze its input down through a
-narrow "bottleneck" and then rebuild it again on the other side. If it can
-reconstruct a row well, the row looks like the kind of thing it was trained on;
-if reconstruction is poor, the row is unusual.
+An autoencoder is a network that learns to squeeze its input down through a narrow bottleneck and
+then rebuild it on the other side. If it reconstructs a row well, that row looks like the kind of
+thing it was trained on. If reconstruction is poor, the row is unusual.
 
-Here's the trick I'm using: I train it on *only* the normal, non-haven rows.
-So it gets really good at reproducing ordinary jurisdiction-pairs but never
-learns what havens look like. When I then show it a haven row, it tends to
-rebuild it badly, and that reconstruction error becomes an anomaly score --
-high error means "this row doesn't fit the normal pattern, flag it".
+The trick I am using is to train it on the ordinary, non-haven rows only. It gets very good at
+reproducing typical jurisdiction pairs and never learns what a haven looks like, so when it is
+shown a haven row it tends to rebuild it badly. That reconstruction error becomes the anomaly
+score: high error means this row does not fit the normal pattern, flag it.
 
-Why bother, when I already have a supervised MLP? Two reasons. It gives a
-second, independent opinion. And because it never touches the labels during
-training, it sidesteps a big weakness of this project: my haven labels are only
-a rough proxy, so a method that doesn't depend on them is reassuring.
+Why bother, when there is already a supervised MLP? Two reasons. It gives a second, independent
+opinion. And because it never touches the labels while training, it sidesteps the biggest weakness
+of this project - my haven labels are only a rough proxy, so a method that does not depend on them
+is reassuring.
 """
 
 from __future__ import annotations
@@ -29,15 +27,15 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from config import AE_CONFIG, RANDOM_SEED
+from models import set_seed
 
 
 class ProfitShiftingAutoencoder(nn.Module):
-    """Encoder that funnels down to a small bottleneck, decoder that mirrors it.
+    """An encoder that funnels down to a small bottleneck, and a decoder that mirrors it back up.
 
-    The encoder shrinks the input to a compact code; the decoder expands it
-    back to the original size. Forcing everything through that narrow middle is
-    what stops the net from just copying the input straight through -- it has to
-    learn the genuine structure of "normal" rows to rebuild them.
+    The encoder shrinks the input to a compact code and the decoder expands it back to the original
+    size. Forcing everything through that narrow middle is what stops the net copying the input
+    straight through: it has to learn the genuine structure of a normal row in order to rebuild it.
     """
 
     def __init__(self, input_dim: int,
@@ -45,25 +43,25 @@ class ProfitShiftingAutoencoder(nn.Module):
         super().__init__()
         encoder_dims = encoder_dims or AE_CONFIG["encoder_dims"]
 
-        # Build the encoder: Linear -> ReLU repeated, getting narrower each step.
+        # The encoder: Linear -> ReLU repeated, getting narrower at each step.
         enc: list[nn.Module] = []
         prev = input_dim
         for h in encoder_dims:
             enc += [nn.Linear(prev, h), nn.ReLU()]
             prev = h
-        # Drop the final ReLU so the bottleneck code can take any value
-        # (positive or negative), rather than being clipped at zero.
+        # Drop the final ReLU so the bottleneck code can take any value, positive or negative,
+        # rather than being clipped at zero.
         self.encoder = nn.Sequential(*enc[:-1])
 
-        # Decoder mirrors the encoder back up to the original width.
+        # The decoder mirrors the encoder back up to the original width.
         dec: list[nn.Module] = []
         rev = list(reversed(encoder_dims[:-1])) + [input_dim]
         prev = encoder_dims[-1]
         for h in rev:
             dec += [nn.Linear(prev, h), nn.ReLU()]
             prev = h
-        # Drop the final ReLU here too -- the output should be able to match any
-        # value in the (scaled) input, not just non-negative ones.
+        # Drop the final ReLU here too: the output has to be able to match any value in the scaled
+        # input, not only non-negative ones.
         self.decoder = nn.Sequential(*dec[:-1])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -72,9 +70,8 @@ class ProfitShiftingAutoencoder(nn.Module):
 
     @torch.no_grad()
     def reconstruction_error(self, x: torch.Tensor) -> torch.Tensor:
-        # The anomaly score itself: how far the rebuilt row is from the
-        # original, averaged across features (mean squared error per row).
-        # Small = looks normal; large = looks anomalous.
+        # The anomaly score itself: how far the rebuilt row sits from the original, averaged across
+        # features. Small means it looks normal, large means it looks anomalous.
         self.eval()
         x_hat = self.forward(x)
         return torch.mean((x - x_hat) ** 2, dim=1)
@@ -87,22 +84,20 @@ def train_autoencoder(
     seed: int = RANDOM_SEED,
     verbose: bool = False,
 ) -> tuple[ProfitShiftingAutoencoder, dict]:
-    """Train the autoencoder on normal (non-haven) rows only.
+    """Train the autoencoder on normal, non-haven rows only.
 
-    Note both inputs are the negative class -- this is deliberate and is the
-    whole point of the approach (see the module docstring). Hands back the
-    trained model plus a little dict of metadata: which epoch was best and the
-    error threshold above which a row counts as anomalous.
+    Both inputs being the negative class is deliberate, and is the whole point of the approach - see
+    the module docstring. What comes back is the trained model plus a small dict of metadata: which
+    epoch was best, and the error threshold above which a row counts as anomalous.
     """
     cfg = {**AE_CONFIG, **(config or {})}
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    set_seed(seed)
     device = torch.device("cpu")
 
     model = ProfitShiftingAutoencoder(input_dim=X_train_neg.shape[1],
                                       encoder_dims=cfg["encoder_dims"]).to(device)
-    # MSE loss because the task is reconstruction -- we're literally measuring
-    # how close the rebuilt row is to the input, not doing classification here.
+    # MSE loss, because the task here is reconstruction. We are measuring how close the rebuilt row
+    # is to the input, not classifying anything.
     criterion = nn.MSELoss()
     optimiser = torch.optim.Adam(model.parameters(),
                                  lr=cfg["learning_rate"],
@@ -115,14 +110,14 @@ def train_autoencoder(
     best_val = float("inf")
     best_state: dict | None = None
     best_epoch = 0
-    patience_left = cfg["patience"]   # early-stopping counter, as in the other models
+    patience_left = cfg["patience"]   # the early-stopping counter, as in the other models
 
     for epoch in range(cfg["max_epochs"]):
         model.train()
         for (xb,) in loader:
             xb = xb.to(device)
             optimiser.zero_grad()
-            # Target is the input itself -- the net is trying to reproduce xb.
+            # The target is the input itself - the net is trying to reproduce xb.
             loss = criterion(model(xb), xb)
             loss.backward()
             optimiser.step()
@@ -132,8 +127,8 @@ def train_autoencoder(
             # Validation loss is reconstruction error on held-out normal rows.
             val_loss = criterion(model(Xv), Xv).item()
 
-        # Early stopping: keep the weights from whichever epoch reconstructed
-        # the validation rows best, and bail once it stops improving.
+        # Early stopping: keep the weights from whichever epoch rebuilt the validation rows best,
+        # and bail out once it stops improving.
         if val_loss < best_val - 1e-6:
             best_val = val_loss
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
@@ -150,11 +145,10 @@ def train_autoencoder(
     if best_state is not None:
         model.load_state_dict(best_state)
 
-    # Now set the cut-off for calling something an anomaly. I look at the
-    # reconstruction errors on the normal training rows and take a high
-    # percentile of them (e.g. the 95th). The logic: even normal rows have some
-    # error, so the threshold sits just above where most normal rows land --
-    # anything reconstructing worse than that gets flagged as suspicious.
+    # Now for the cut-off that decides what counts as an anomaly. I look at the reconstruction
+    # errors on the normal training rows and take a high percentile of them, the 95th by default.
+    # The logic is that even normal rows carry some error, so the threshold should sit just above
+    # where most of them land. Anything rebuilt worse than that gets flagged.
     with torch.no_grad():
         train_err = model.reconstruction_error(
             torch.from_numpy(X_train_neg).to(device)).cpu().numpy()

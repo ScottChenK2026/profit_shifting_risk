@@ -45,11 +45,10 @@ else:
     FIG = ROOT / "figures"
     OUT = ROOT / "CM3070_Preliminary_Report_18082026.docx"
 
-# Cached heading -> page number map for the contents list. Regenerate with
+# A cached heading -> page number map for the contents list. Regenerate it with
 #     python build_report.py --remap
-# which builds the file, renders it, reads the real page numbers back, and
-# rebuilds. The numbers are also PAGEREF fields, so Word corrects them itself
-# when fields refresh on open.
+# which builds the file, renders it, reads the real page numbers back out and rebuilds. The numbers
+# are PAGEREF fields as well, so Word corrects them itself whenever fields are refreshed on open.
 PAGE_MAP_FILE = ROOT / "toc_pages.json"
 PAGE_MAP: dict[str, int] = (
     json.loads(PAGE_MAP_FILE.read_text()) if PAGE_MAP_FILE.exists() else {})
@@ -70,8 +69,8 @@ for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
 
 
 def _set_font(style, name=FONT):
-    """Set the font on a style for Latin, East-Asian and complex scripts, so
-    Word does not silently fall back to Calibri for stray characters."""
+    """Set the font on a style for Latin, East-Asian and complex scripts, so that Word does not
+    quietly fall back to Calibri for the odd stray character."""
     style.font.name = name
     rpr = style.element.get_or_add_rPr()
     rfonts = rpr.find(qn("w:rFonts"))
@@ -330,9 +329,8 @@ def build_toc(entries, page_map, anchor):
             hyper.append(el)
         p._p.append(hyper)
 
-    # The entries are only known once every chapter has been written, so they
-    # are created at the end of the document and then moved up to sit directly
-    # under the Contents heading.
+    # The entries are only known once every chapter has been written, so they get created at the
+    # end of the document and are then moved up to sit directly under the Contents heading.
     prev = anchor._p
     for el in created:
         prev.addnext(el)
@@ -1562,8 +1560,8 @@ print(f"{'TOTAL body':<22}{total:>8}{9500:>8}  "
 # Optional: rebuild the contents page numbers from an actual render
 # --------------------------------------------------------------------------- #
 def _remap() -> None:
-    """Render the document, read which page each heading lands on, cache that,
-    and rebuild so the contents list shows real page numbers."""
+    """Render the document, read which page each heading actually landed on, cache that, and
+    rebuild so the contents list carries real page numbers."""
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         print("LibreOffice not found - keeping the existing page map.")

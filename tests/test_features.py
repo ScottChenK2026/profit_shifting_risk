@@ -1,6 +1,5 @@
-"""Tests for the feature engineering and the train/val/test splitting - the
-steps between raw data and what the models actually see.
-"""
+"""Tests for the feature engineering and the train/validation/test splitting - everything that
+happens between the raw data and what the models actually see."""
 
 import numpy as np
 
@@ -11,15 +10,14 @@ from preprocessing import prepare_random_splits
 
 
 def _feats(seed=11):
-    # Shorthand the tests reuse: generate synthetic data and run it all the way
-    # through feature engineering.
+    # Shorthand the tests reuse: generate synthetic data and run it through feature engineering.
     return engineer_features(
         add_supplementary_columns(generate_synthetic_cbcr(seed=seed)))
 
 
 def test_all_feature_columns_present():
-    # Every feature the config promises (and the label) needs to actually exist
-    # after engineering, or the models will fall over downstream.
+    # Every feature the config promises, and the label, has to exist after engineering, or the
+    # models fall over downstream.
     feats = _feats()
     for col in FEATURE_COLUMNS:
         assert col in feats.columns
@@ -27,8 +25,8 @@ def test_all_feature_columns_present():
 
 
 def test_activity_shares_bounded():
-    # These are shares, so they should sit in [0, 1] (give or take floating-point
-    # wobble). If they drift outside that, the ratio maths is wrong somewhere.
+    # These are shares, so they belong in [0, 1] give or take floating-point wobble. Drifting
+    # outside that range would mean the ratio arithmetic is wrong somewhere.
     feats = _feats()
     for col in ("holding_share", "shifting_activity_share", "real_activity_share"):
         v = feats[col].dropna()
@@ -36,7 +34,7 @@ def test_activity_shares_bounded():
 
 
 def test_label_is_binary():
-    # The target really is just 0 or 1 - no stray values sneaking in.
+    # The target really is just 0 or 1, with no stray values sneaking in.
     feats = _feats()
     assert set(feats[TARGET_COLUMN].unique()).issubset({0, 1})
 
@@ -49,9 +47,9 @@ def test_imputation_removes_nans():
 
 
 def test_no_single_feature_is_circular_with_label():
-    # The big one: guard against label leakage. If any single feature were nearly
-    # perfectly correlated with the target, the model would just be reading the
-    # answer off that column and the whole exercise would be meaningless.
+    # The big one: a guard against label leakage. If any single feature were nearly perfectly
+    # correlated with the target, the model would just be reading the answer off that column and
+    # the whole exercise would be meaningless.
     feats = impute_features(_feats())[0]
     for col in FEATURE_COLUMNS:
         c = np.corrcoef(feats[col], feats[TARGET_COLUMN])[0, 1]
@@ -59,11 +57,11 @@ def test_no_single_feature_is_circular_with_label():
 
 
 def test_split_shapes_and_scaling():
-    # Splitting shouldn't lose or duplicate rows, and the standardised training
-    # set should sit around zero mean (a quick check the scaler was actually fitted).
+    # Splitting should neither lose nor duplicate rows, and the standardised training set should
+    # sit around zero mean - a quick check that the scaler was actually fitted.
     feats = _feats()
     s = prepare_random_splits(feats)
     total = s.X_train.shape[0] + s.X_val.shape[0] + s.X_test.shape[0]
     assert total == len(feats)
     assert s.X_train.shape[1] == len(FEATURE_COLUMNS)
-    assert abs(s.X_train.mean()) < 0.1   # train standardised ~0 mean
+    assert abs(s.X_train.mean()) < 0.1   # train standardised to roughly zero mean

@@ -140,11 +140,15 @@ profit_shifting_risk/
     ├── explain.py           # SHAP (TreeExplainer / DeepExplainer + fallbacks)
     ├── cli.py               # command-line risk scorer
     └── models/
+        ├── __init__.py      # shared seed helper + per-epoch loss record
         ├── ft_transformer.py
         ├── mlp.py
         ├── autoencoder.py
         └── xgb_baseline.py
 ```
+
+`data/` holds the raw OECD export, the wide model table the adapter builds from it, and the
+synthetic cache. `outputs/` and the caches are regenerated, so neither is tracked in git.
 
 All libraries are open-source; no proprietary or paid data are included.
 

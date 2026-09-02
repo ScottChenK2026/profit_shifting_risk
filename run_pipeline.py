@@ -1,30 +1,28 @@
 """
 run_pipeline.py
 ---------------
-The whole project, start to finish, in one runnable script. It loads the data,
-builds features, trains the four models, and then evaluates them on a test set
-made of *later years* than the training data (so we're really asking "does this
-generalise to next year?"). Everything it produces lands in ``outputs/``, ready
-to drop into the report.
+The whole project, start to finish, in one runnable script. It loads the data, builds the features,
+trains the four models, and evaluates them on a test set drawn from later years than the training
+data - so the question being asked is really "does this generalise to next year?". Everything it
+produces lands in ``outputs/``, ready to drop into the report.
 
-The rough order of events:
+The order of events:
 
-    1. load the real OECD wide table (or fall back to synthetic) -> features -> label
+    1. load the real OECD wide table, or fall back to synthetic, then features and label
     2. EDA figures
-    3. out-of-time split (train 2016-19 / val 2020 / test 2021)
-    4. train + evaluate: XGBoost, MLP, FT-Transformer, Autoencoder
-    5. comparative plots, calibration, audit-budget (precision@k)
+    3. out-of-time split: train 2016-19, validate 2020, test 2021
+    4. train and evaluate XGBoost, MLP, FT-Transformer and the autoencoder
+    5. comparative plots, calibration, audit budget (precision@k)
     6. DeLong significance tests against the XGBoost baseline
     7. SHAP interpretability
-    8. face-validity check against the known-haven list
+    8. a face-validity check against the known-haven list
     9. save everything the CLI needs to score new records
 
-The whole thing is resumable, which matters because training four models takes a
-while. After each model finishes, its test-set predictions are cached as
-outputs/models/<name>_probs.npy. Re-running the script just reloads anything
-that's already there and skips straight past it, so I can train one model now,
-another later, and still end up with a complete run. Pass --fresh (or delete the
-.npy files) when I actually want to retrain from scratch.
+The whole thing is resumable, which matters because training four models takes a while. After each
+model finishes, its test-set predictions are cached as outputs/models/<name>_probs.npy, and
+re-running the script reloads anything already there and skips past it. So I can train one model
+now and another later and still end up with a complete run. Pass --fresh, or delete the .npy files,
+when a genuine retrain from scratch is wanted.
 """
 
 from __future__ import annotations
@@ -35,11 +33,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 
-# config.py sits in the project root and the rest of the code lives in src/,
-# and everything uses flat imports, so both directories need to be importable.
+# config.py sits in the project root while the rest of the code lives in src/, and everything uses
+# flat imports, so both directories need to be importable.
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
@@ -56,12 +53,12 @@ from models.mlp import train_mlp                             # noqa: E402
 from models.ft_transformer import train_ft_transformer       # noqa: E402
 from models.autoencoder import train_autoencoder             # noqa: E402
 
-# --fresh forces a full retrain; otherwise we reuse whatever's already cached.
+# --fresh forces a full retrain; otherwise whatever is already cached gets reused.
 FRESH = "--fresh" in sys.argv
 
 
 def _probs_path(name):
-    # Where a model's cached test-set predictions live (the basis for resuming).
+    # Where a model's cached test-set predictions live, which is what makes resuming possible.
     return MODEL_DIR / f"{name}_probs.npy"
 
 
@@ -77,7 +74,13 @@ def main() -> dict:
     summary["class_balance"] = feats[TARGET_COLUMN].value_counts().to_dict()
     print("rows:", len(feats), "| class balance:", summary["class_balance"])
 
-    # EDA only needs to run once; a little flag file lets us skip it on reruns.
+    # Which features have the most gaps. Worth knowing before trusting any of them, and worth
+    # recording in the summary so the report can quote real numbers rather than an impression.
+    miss = summarise_missing(feats).sort_values("missing_pct", ascending=False)
+    summary["missing_pct_worst"] = miss["missing_pct"].head(5).to_dict()
+    print("most incomplete features:", summary["missing_pct_worst"])
+
+    # EDA only needs to run once, so a small flag file lets reruns skip it.
     if FRESH or not (METRIC_DIR / "eda_done.flag").exists():
         eda.plot_feature_distributions(feats)
         corr = eda.plot_correlation_heatmap(feats)
@@ -86,9 +89,9 @@ def main() -> dict:
             corr.where(~np.eye(len(corr), dtype=bool)).abs().max().max())
         (METRIC_DIR / "eda_done.flag").write_text("ok")
 
-    # Out-of-time split: train on the earlier years, test on the latest one.
-    # A plain random split would let the model peek at the same companies across
-    # years and flatter the scores, so the test set deliberately sits in the future.
+    # The out-of-time split: train on the earlier years, test on the latest. A random split would
+    # let the model see the same companies in adjacent years and flatter the scores, so the test
+    # set deliberately sits in the future.
     print("\n=== 3. Out-of-time split ===")
     s = prepare_temporal_splits(feats)
     print(f"kind={s.split_kind}  train={s.X_train.shape}  "
@@ -152,16 +155,14 @@ def main() -> dict:
         probs[name] = np.load(_probs_path(name)); print(f"[skip] {name} cached")
     else:
         print("\n=== 4d. Autoencoder ===")
-        # The autoencoder only ever sees the "normal" (non-haven) rows. The idea
-        # is it learns what ordinary records look like, so anything it struggles
-        # to reconstruct is unusual and therefore more suspicious.
+        # The autoencoder only ever sees the ordinary, non-haven rows. It learns what a normal
+        # record looks like, so anything it struggles to rebuild is unusual and more suspicious.
         ae, meta = train_autoencoder(s.X_train[s.y_train == 0],
                                      s.X_val[s.y_val == 0], verbose=True)
         err = ae.reconstruction_error(torch.from_numpy(s.X_test)).numpy()
-        # Reconstruction error isn't a probability, so we min-max it into [0, 1]
-        # purely to use it as a ranking score. We never read it as a calibrated
-        # probability, which is why the autoencoder is only reported as a ranker
-        # (and is left out of the calibration plot further down).
+        # Reconstruction error is not a probability, so it gets min-max scaled into [0, 1] purely
+        # so it can be used as a ranking score. It is never read as a calibrated probability, which
+        # is why the autoencoder is reported only as a ranker and left out of the calibration plot.
         probs[name] = (err - err.min()) / (err.max() - err.min() + 1e-9)
         np.save(_probs_path(name), probs[name])
         nt = float((meta["threshold"] - err.min())
@@ -170,7 +171,7 @@ def main() -> dict:
             s.y_test, probs[name], threshold=min(max(nt, 0), 0.999)),
             **{k: meta[k] for k in ("best_epoch", "threshold")}}, name)
 
-    # ---- 5-6. Assembly: plots, audit budget, significance ----------------- #
+    # ---- 5-6. Assembly: plots, audit budget, significance ------------------ #
     print("\n=== 5-6. Comparative evaluation ===")
     y_test = np.load(MODEL_DIR / "y_test.npy")
     pretty = {"ft_transformer": "FT-Transformer", "mlp": "MLP",
@@ -178,8 +179,7 @@ def main() -> dict:
     curves = {pretty[k]: (y_test, probs[k]) for k in probs}
     ev.plot_roc_curves(curves)
     ev.plot_pr_curves(curves)
-    # Autoencoder scores aren't real probabilities, so calibration would be
-    # meaningless for it - leave it out of this plot.
+    # Autoencoder scores are not real probabilities, so calibration would be meaningless for it.
     ev.plot_calibration({k: v for k, v in curves.items()
                          if k != "Autoencoder"})
     for k in ("mlp", "xgboost", "ft_transformer"):
@@ -191,8 +191,8 @@ def main() -> dict:
     summary["audit_budget"] = {k: ev.precision_at_k(y_test, probs[k])
                                for k in probs}
 
-    # XGBoost is the baseline; for each neural net we check (via DeLong) whether
-    # its AUC is genuinely different or just noise on this particular test set.
+    # XGBoost is the baseline. For each neural net, DeLong's test says whether its AUC is genuinely
+    # different or just noise on this particular test set.
     sig = {}
     for k in ("ft_transformer", "mlp"):
         if k in probs and "xgboost" in probs:
@@ -201,9 +201,9 @@ def main() -> dict:
     summary["delong_vs_xgboost"] = sig
 
     # ---- 7. SHAP ---------------------------------------------------------- #
-    # SHAP can be brittle across shap/torch/xgboost version combos, and it's not
-    # essential to the run, so the whole block is wrapped in a try/except - if it
-    # falls over we just skip it rather than losing the rest of the results.
+    # SHAP can be brittle across shap, torch and xgboost version combinations, and it is not
+    # essential to the run, so the whole block sits in a try/except. If it falls over we skip it
+    # rather than losing the rest of the results.
     print("\n=== 7. SHAP ===")
     try:
         from explain import explain_mlp, explain_xgboost
@@ -222,11 +222,10 @@ def main() -> dict:
     except Exception as exc:
         print(f"[shap] skipped: {exc!r}")
 
-    # ---- 8. Face validity ------------------------------------------------- #
-    # Face validity: a sanity check that the scores mean something in the real
-    # world. We take the best model, look at the 50 records it scores highest,
-    # and see how many really are known havens (and which jurisdictions show up).
-    # If the top of the list were random, the whole thing would be suspect.
+    # ---- 8. Face validity -------------------------------------------------- #
+    # A sanity check that the scores mean something in the real world: take the best model, look at
+    # the 50 records it scores highest, and see how many really are known havens and which
+    # jurisdictions turn up. If the top of the list looked random, the whole thing would be suspect.
     print("\n=== 8. Face validity ===")
     best = max(metrics_all, key=lambda k: metrics_all[k]["auc_roc"])
     tf = s.test_frame.copy()
@@ -239,10 +238,9 @@ def main() -> dict:
     print(f"best={best}  top-50 haven rate="
           f"{summary['face_validity_top50_haven_rate']:.1%}")
 
-    # ---- 9. Persist CLI artefacts ---------------------------------------- #
-    # The CLI scores brand-new records, so it needs the exact same scaler and
-    # imputation medians the models were trained with - save them alongside the
-    # summary so scoring later matches training.
+    # ---- 9. Persist what the CLI needs ------------------------------------- #
+    # The CLI scores brand-new records, so it needs exactly the scaler and medians the models were
+    # trained with. Saving them alongside the summary keeps later scoring consistent with training.
     with open(MODEL_DIR / "scaler.pkl", "wb") as fh:
         pickle.dump(s.scaler, fh)
     with open(MODEL_DIR / "medians.pkl", "wb") as fh:

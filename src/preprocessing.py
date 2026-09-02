@@ -1,21 +1,19 @@
 """
 preprocessing.py
 ----------------
-Takes the engineered features and gets them ready to feed a model: splits the
-data into train/validation/test, fills any gaps, and rescales the numbers.
+Takes the engineered features and gets them ready for a model: splits the data into train,
+validation and test, fills any gaps, and rescales the numbers.
 
-By default it splits by time: train on the earliest years, tune on the next
-year, and test on the most recent one (the year lists live in config.py). I do
-it this way on purpose - predicting a later year from earlier ones is both
-more realistic and a tougher test than randomly shuffling everything, and it
-rules out a sneaky form of cheating where almost-identical rows from the same
-year land in both the training and test sets. There's also a plain random
-split here that I use only for comparison experiments.
+By default it splits by time - train on the earliest years, tune on the next, test on the most
+recent, with the year lists living in config.py. That is deliberate. Predicting a later year from
+earlier ones is both more realistic and a tougher test than shuffling everything, and it rules out
+a sneaky form of cheating where almost-identical rows from the same year land in both the training
+and the test set. A plain random split is also here, but only for comparison experiments.
 
-One detail that matters for fairness: the fill-in values and the rescaling are
-worked out using the training data only, then applied unchanged to the
-validation and test sets. If the test set helped decide those, it would
-effectively be peeking at itself and the scores would be too good to believe.
+One detail matters for fairness: the fill-in values and the rescaling are worked out on the
+training data alone, then applied unchanged to validation and test. If the test set had a hand in
+deciding them it would effectively be peeking at itself, and the scores would be too good to
+believe.
 """
 
 from __future__ import annotations
@@ -34,10 +32,9 @@ from config import (
 from features import impute_features
 
 
-# A tidy bundle holding everything a training run needs: the three feature sets
-# and their labels, plus the fitted scaler and fill-in medians (kept so the same
-# transforms can be reapplied later), the feature names, the test rows in their
-# original table form, and a note of which kind of split this was.
+# A tidy bundle of everything a training run needs: the three feature sets and their labels, the
+# fitted scaler and the fill-in medians (kept so the same transforms can be reapplied later), the
+# feature names, the test rows in their original table form, and a note of which split this was.
 @dataclass
 class DataSplits:
     X_train: np.ndarray
@@ -49,21 +46,19 @@ class DataSplits:
     scaler: StandardScaler
     medians: pd.Series
     feature_names: list[str]
-    test_frame: pd.DataFrame      # engineered+imputed rows of the test set
+    test_frame: pd.DataFrame      # engineered and imputed rows of the test set
     split_kind: str
 
 
 def _assemble(train_df, val_df, test_df, kind) -> DataSplits:
-    # Work out the fill-in medians on the training set, then reuse them on val
-    # and test - so the held-out data never influences how its own gaps are
-    # filled.
+    # Work the medians out on the training set, then reuse them on validation and test, so the
+    # held-out data never influences how its own gaps get filled.
     train_df, medians = impute_features(train_df)
     val_df, _ = impute_features(val_df, medians)
     test_df, _ = impute_features(test_df, medians)
 
-    # Rescale every feature to a common scale (mean 0, spread 1) so no single
-    # feature dominates just because its raw numbers happen to be larger. Same
-    # rule as above: fit the scaler on train only, then apply it to the rest.
+    # Rescale every feature to mean 0 and spread 1, so no single feature dominates purely because
+    # its raw numbers happen to be bigger. Same rule as above: fit on train, apply to the rest.
     scaler = StandardScaler()
     X_train = scaler.fit_transform(train_df[FEATURE_COLUMNS].values)
     X_val = scaler.transform(val_df[FEATURE_COLUMNS].values)
@@ -81,33 +76,32 @@ def _assemble(train_df, val_df, test_df, kind) -> DataSplits:
 
 
 def prepare_temporal_splits(feats: pd.DataFrame) -> DataSplits:
-    """The main split: carve the data up by year (earliest years to train,
-    later ones to tune and test)."""
+    """The main split: carve the data up by year, with the earliest years for training and the
+    later ones for tuning and testing."""
     df = feats.reset_index(drop=True)
     train_df = df[df["year"].isin(TRAIN_YEARS)].copy()
     val_df = df[df["year"].isin(VAL_YEARS)].copy()
     test_df = df[df["year"].isin(TEST_YEARS)].copy()
     if len(val_df) == 0 or len(test_df) == 0:
-        # If the data doesn't actually cover those years (can happen with
-        # synthetic or partial data), there's nothing to test on - so quietly
-        # fall back to the random split instead of crashing.
+        # If the data does not actually cover those years, which can happen with synthetic or
+        # partial data, there is nothing to test on - so fall back to the random split rather than
+        # crashing.
         return prepare_random_splits(feats)
     return _assemble(train_df, val_df, test_df, "temporal")
 
 
 def prepare_random_splits(feats: pd.DataFrame, seed: int = RANDOM_SEED
                           ) -> DataSplits:
-    """The comparison split: shuffle everything and slice off test and
-    validation chunks at random. "stratify" keeps the haven/non-haven balance
-    roughly the same in each chunk, which matters because havens are the rare
-    case and we don't want a slice that accidentally has almost none."""
+    """The comparison split: shuffle everything and slice off test and validation chunks at random.
+    Stratifying keeps the haven and non-haven balance roughly the same in each chunk, which matters
+    because havens are the rare case and a slice with almost none would be useless."""
     df = feats.reset_index(drop=True)
     y = df[TARGET_COLUMN].values
     idx = np.arange(len(df))
     idx_tv, idx_te = train_test_split(idx, test_size=TEST_SIZE, stratify=y,
                                       random_state=seed)
-    # Take the validation slice out of what's *left* after removing test, so the
-    # final proportions come out as intended rather than off by a bit.
+    # Take the validation slice out of what is left after removing test, so the final proportions
+    # come out as intended rather than slightly off.
     rel_val = VAL_SIZE / (1 - TEST_SIZE)
     idx_tr, idx_va = train_test_split(idx_tv, test_size=rel_val,
                                       stratify=y[idx_tv], random_state=seed)

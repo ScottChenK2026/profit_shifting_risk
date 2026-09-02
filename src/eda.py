@@ -1,10 +1,10 @@
 """
 eda.py
 ------
-The "get to know the data first" figures - the stuff I look at before trusting
-any model. Three plots: how each feature is distributed (and whether havens look
-different from non-havens), how the features correlate with each other, and how
-lopsided the haven/non-haven split is. All saved into ``outputs/figures`` for the report.
+The get-to-know-the-data figures, the ones I look at before trusting any model. Three plots: how
+each feature is distributed and whether havens look different from non-havens, how the features
+correlate with one another, and how lopsided the haven/non-haven split is. Everything lands in
+``outputs/figures`` ready for the report.
 """
 
 from __future__ import annotations
@@ -21,10 +21,9 @@ from config import FEATURE_COLUMNS, FIGURE_DIR, TARGET_COLUMN
 
 def plot_feature_distributions(feats: pd.DataFrame,
                                filename: str = "feature_distributions.png") -> None:
-    """One histogram per feature, with havens and non-havens overlaid so you can
-    eyeball whether a feature actually separates the two. Densities (not raw
-    counts) because the classes are so unbalanced that counts would be unreadable.
-    """
+    """One histogram per feature, havens and non-havens overlaid, so I can see at a glance whether
+    a feature actually separates the two. Densities rather than raw counts, because the classes are
+    so unbalanced that counts would be unreadable."""
     n = len(FEATURE_COLUMNS)
     ncols = 4
     nrows = int(np.ceil(n / ncols))
@@ -48,16 +47,14 @@ def plot_feature_distributions(feats: pd.DataFrame,
 
 
 def plot_correlation_heatmap(feats: pd.DataFrame,
-                             filename: str = "correlation_heatmap.png") -> None:
-    """Heatmap of how the features move together. Mostly a check for badly
-    redundant pairs - if two features are nearly the same thing it's worth
-    knowing. Returns the matrix so the pipeline can log the worst off-diagonal pair.
-    """
+                             filename: str = "correlation_heatmap.png") -> pd.DataFrame:
+    """Heatmap of how the features move together, mainly as a check for badly redundant pairs - if
+    two features are near enough the same thing, that is worth knowing. The matrix comes back as
+    well, so the pipeline can log the worst off-diagonal pair."""
     corr = feats[FEATURE_COLUMNS].corr()
-    # With eighteen features the annotated cells were colliding at the old
-    # figure size, so: draw only the lower triangle (the matrix is symmetric,
-    # the upper half repeats it), give the figure more room, and shrink the
-    # in-cell numbers. Same information, actually readable on the page.
+    # With eighteen features the annotated cells were colliding at the old figure size. Drawing
+    # only the lower triangle fixes it - the matrix is symmetric, so the upper half is a repeat -
+    # along with a bigger figure and smaller in-cell numbers. Same information, now readable.
     mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
     fig, ax = plt.subplots(figsize=(11, 9))
     sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="coolwarm",
@@ -78,10 +75,9 @@ def plot_correlation_heatmap(feats: pd.DataFrame,
 
 def plot_class_balance(feats: pd.DataFrame,
                        filename: str = "class_balance.png") -> None:
-    """Bar chart of how many haven vs non-haven rows there are. Havens are the
-    minority, which is exactly why later on we lean on PR-AUC and precision@k
-    rather than plain accuracy - accuracy is easy to fake when one class is rare.
-    """
+    """Bar chart of how many haven and non-haven rows there are. Havens are the minority, which is
+    exactly why the evaluation later leans on PR-AUC and precision@k rather than plain accuracy -
+    accuracy is easy to fake when one class is rare."""
     counts = feats[TARGET_COLUMN].value_counts().sort_index()
     plt.figure(figsize=(4, 4))
     plt.bar(["Non-haven", "Haven"], counts.values,

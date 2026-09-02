@@ -1,31 +1,29 @@
 """
 oecd_adapter.py
 ---------------
-A one-off cleanup script. It takes the raw file you download from the OECD's
-Data Explorer (their "Table I" country-by-country reporting data) and reshapes
-it into the neat table the rest of the project expects, saved to
-``data/oecd_cbcr_wide.csv``.
+A one-off cleanup script. It takes the raw file you download from the OECD Data Explorer - their
+Table I country-by-country reporting statistics - and reshapes it into the neat table the rest of
+the project expects, saved as ``data/oecd_cbcr_wide.csv``.
 
-The reason this needs to exist: the raw download is huge (around 350 MB, nearly
-a million rows) and laid out in a long, awkward shape - one row per country pair
-per measure per year, so a single country pair is spread across dozens of rows.
-That's too big to load all at once and the wrong shape for modelling. So this
-reads it in chunks (to keep memory sane), throws away the rows we don't need,
-and rotates it into one tidy row per (reporting country, partner country, year),
-with each measure as its own column.
+Why this has to exist: the raw download is about 350 MB and close to a million rows, laid out in a
+long SDMX shape with one row per country pair per measure per year. A single country pair is
+spread across dozens of rows. It is too big to load in one go and the wrong shape for modelling
+anyway. So this reads it in chunks to keep memory sane, throws away the rows we do not need, and
+rotates what is left into one tidy row per reporting country, partner country and year, with each
+measure as its own column.
 
 What it pulls out
 -----------------
-* The money figures (in USD): revenue split into total/within-group/outside,
-  profit before tax, an adjusted profit figure, tax paid and tax owed, share
-  capital, accumulated earnings, and tangible assets.
-* The counts: employees, and how many groups / sub-groups / entities.
-* The office-activity counts (holding, internal group finance, IP, dormant,
-  factories, sales, services, ...) - these feed the activity-mix signals in
-  features.py that I think are the novel part of this project.
-* From the separate profit-makers vs loss-makers breakdown (OECD calls these
-  PANELAI and PANELAII), how much profit sits with profitable sub-groups versus
-  loss-making ones, which becomes the loss-parking signal.
+* The money figures, in USD: revenue split into total, within-group and outside, profit before
+  tax, an adjusted profit figure, tax paid and tax owed, share capital, accumulated earnings and
+  tangible assets.
+* The counts: employees, and how many groups, sub-groups and entities.
+* The office-activity counts - holding, internal group finance, IP, dormant, factories, sales,
+  services - which feed the activity-mix signals in features.py that I think are the novel part
+  of this project.
+* From the separate profit-makers and loss-makers breakdown, which the OECD calls PANELAI and
+  PANELAII, how much profit sits with profitable sub-groups versus loss-making ones. That becomes
+  the loss-parking signal.
 
 How to run it
 -------------
@@ -47,31 +45,28 @@ from reference_data import (                              # noqa: E402
     ACTIVITY_CODES, FINANCIAL_CODES, is_real_jurisdiction,
 )
 
-# We only read the code columns, not the human-readable label columns - the
-# codes are all we match on, and the labels contain commas that make the CSV
-# fiddlier to parse anyway.
+# Only the code columns are read, not the human-readable label columns. The codes are all we match
+# on, and the labels contain commas that make the CSV fiddlier to parse.
 USECOLS = ["REF_AREA", "COUNTERPART_AREA", "MEASURE", "PROFIT_GROUPING",
            "STATISTICAL_OPERATION", "AGGREGATION_TYPE", "TIME_PERIOD",
            "OBS_VALUE"]
 
-# The full set of measures we care about. "PROFIT" gets added in separately
-# below because we also need it for the profit/loss panels.
+# The measures we care about. PROFIT is added separately below because it is also needed for the
+# profit and loss panels.
 WANTED_MEASURES = set(FINANCIAL_CODES) | set(ACTIVITY_CODES)
-# How many rows to read at a time - big enough to be fast, small enough to fit
-# comfortably in memory.
+# Rows per chunk: big enough to be quick, small enough to sit comfortably in memory.
 CHUNK = 200_000
 
 
 def _stream_filter(raw_path: Path) -> pd.DataFrame:
-    """Read the giant file a chunk at a time and throw away everything we don't
-    need, so we never hold the whole thing in memory at once."""
+    """Work through the file a chunk at a time, discarding everything we do not need, so the whole
+    thing never has to be held in memory at once."""
     keep = []
     total = 0
     for chunk in pd.read_csv(raw_path, usecols=USECOLS, chunksize=CHUNK, dtype=str, low_memory=False):
         total += len(chunk)
-        # Keep only: the proper totals (not partial breakdowns), the measures we
-        # actually use, and rows where the partner is a real country rather than
-        # a regional roll-up.
+        # Keep the proper totals rather than partial breakdowns, the measures we actually use, and
+        # only rows where the partner is a real country rather than a regional roll-up.
         m = (
             (chunk["AGGREGATION_TYPE"] == "TOTAL")
             & (chunk["STATISTICAL_OPERATION"] == "_Z")
@@ -80,8 +75,8 @@ def _stream_filter(raw_path: Path) -> pd.DataFrame:
         )
         keep.append(chunk[m])
     df = pd.concat(keep, ignore_index=True)
-    # The values arrive as text; turn them into proper numbers (anything that
-    # won't convert becomes a blank rather than breaking the run).
+    # Values arrive as text. Turn them into numbers, and let anything that will not convert become
+    # a blank rather than breaking the whole run.
     df["OBS_VALUE"] = pd.to_numeric(df["OBS_VALUE"], errors="coerce")
     print(f"[adapter] scanned {total:,} rows -> kept {len(df):,} relevant rows")
     return df
@@ -89,28 +84,27 @@ def _stream_filter(raw_path: Path) -> pd.DataFrame:
 
 def adapt_oecd_export(raw_path: str | Path,
                       out_path: str | Path | None = None) -> pd.DataFrame:
-    """Run the whole conversion: read and filter the raw file, reshape it wide,
-    bolt on the profit/loss panels, tidy the column names, and save the result."""
+    """The whole conversion: read and filter the raw file, reshape it wide, bolt on the profit and
+    loss panels, tidy up the column names, and save the result."""
     raw_path = Path(raw_path)
     out_path = Path(out_path) if out_path else (DATA_DIR / REAL_DATA_FILENAME)
     print(f"[adapter] reading {raw_path} ({raw_path.stat().st_size/1e6:.0f} MB)")
 
     df = _stream_filter(raw_path)
-    # The three things that together identify one row in the final table.
+    # The three things that together identify one row of the final table.
     idx = ["REF_AREA", "COUNTERPART_AREA", "TIME_PERIOD"]
 
-    # The main table uses only the "all sub-groups combined" rows (_T). Pivot so
-    # each measure becomes its own column, then swap OECD's codes for the
-    # readable names from reference_data.py.
+    # The main table uses only the "all sub-groups combined" rows, coded _T. Pivot so each measure
+    # becomes its own column, then swap OECD's codes for the readable names in reference_data.py.
     tot = df[df["PROFIT_GROUPING"] == "_T"]
     wide = (tot.pivot_table(index=idx, columns="MEASURE", values="OBS_VALUE",
                             aggfunc="first").reset_index())
     rename = {**FINANCIAL_CODES, **ACTIVITY_CODES}
     wide = wide.rename(columns=rename)
 
-    # Now grab the profit split between profit-making and loss-making sub-groups
-    # and attach each as its own column. If a panel is missing from this export,
-    # just leave the column blank rather than failing.
+    # Now the profit split between profit-making and loss-making sub-groups, each attached as its
+    # own column. If a panel is missing from this particular export, leave the column blank instead
+    # of failing.
     for panel, name in [("PANELAI", "profit_positive_panel"),
                         ("PANELAII", "profit_negative_panel")]:
         sub = df[(df["PROFIT_GROUPING"] == panel) & (df["MEASURE"] == "PROFIT")]
@@ -128,8 +122,8 @@ def adapt_oecd_export(raw_path: str | Path,
                                 "TIME_PERIOD": "year"})
     wide["year"] = pd.to_numeric(wide["year"], errors="coerce").astype("Int64")
 
-    # Drop rows that have neither revenue nor profit - without at least one of
-    # those there's nothing useful to model, they're just empty shells.
+    # Drop rows with neither revenue nor profit. Without at least one of the two there is nothing
+    # to model - they are empty shells.
     core = ["total_revenues", "profit_before_tax"]
     present_core = [c for c in core if c in wide.columns]
     wide = wide.dropna(subset=present_core, how="all")
@@ -138,8 +132,8 @@ def adapt_oecd_export(raw_path: str | Path,
     wide.to_csv(out_path, index=False)
     print(f"[adapter] wrote {len(wide):,} wide rows x {wide.shape[1]} cols "
           f"-> {out_path}")
-    # Heads-up if some measures we hoped for just aren't in this particular
-    # download - not fatal, but worth knowing so I'm not surprised by gaps later.
+    # A heads-up if measures we hoped for are simply not in this download. Not fatal, but better to
+    # know now than to be puzzled by gaps later.
     miss = [c for c in {**FINANCIAL_CODES, **ACTIVITY_CODES}.values()
             if c not in wide.columns]
     if miss:
@@ -148,8 +142,8 @@ def adapt_oecd_export(raw_path: str | Path,
 
 
 if __name__ == "__main__":
-    # Expect the path to the downloaded raw CSV as the one argument; if it's
-    # missing, print the help text at the top of this file and bail out.
+    # The path to the downloaded raw CSV is the one argument. Without it, print the notes at the
+    # top of this file and stop.
     if len(sys.argv) < 2:
         print(__doc__)
         print("\nERROR: provide the path to the downloaded OECD CSV.")

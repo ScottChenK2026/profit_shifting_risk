@@ -1,20 +1,19 @@
 """
 make_figures.py
 ---------------
-Builds the figures the report needs that the modelling pipeline does not
-produce by itself:
+Builds the figures the report needs that the modelling pipeline does not produce by itself:
 
   * architecture.png   - the system block diagram
-  * gantt.png          - the work plan, with tasks and milestones
+  * gantt.png          - the work plan, with its tasks and milestones
   * listing_*.png      - the code extracts, rendered as images
-  * correlation_heatmap.png (refreshed via src/eda.py, so the readable
-    lower-triangle version replaces the cramped one)
+  * correlation_heatmap.png, refreshed through src/eda.py so that the readable lower-triangle
+    version replaces the cramped original
 
-Plain matplotlib so these sit alongside the pipeline's own figures rather than
-looking like they came from a different document.
+Plain matplotlib, so these sit alongside the pipeline's own figures instead of looking as though
+they came from a different document.
 
-Layout note: block heights are DERIVED from the number of text lines, so text
-can never spill outside a box or collide with its title.
+One layout note: block heights are derived from the number of text lines, which means text can
+never spill outside a box or collide with its title.
 """
 from __future__ import annotations
 
@@ -29,8 +28,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 _ROOT = Path(__file__).resolve().parent
-# Write into outputs/figures when run from inside profit_shifting_risk/,
-# otherwise into a local figures/ folder.
+# Write into outputs/figures when this is run from inside profit_shifting_risk/, and into a local
+# figures/ folder otherwise.
 OUT = (_ROOT / "outputs" / "figures") if (_ROOT / "outputs" / "figures").is_dir() \
     else (_ROOT / "figures")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -181,8 +180,8 @@ def architecture() -> None:
 # 2. Work plan Gantt
 # --------------------------------------------------------------------------- #
 def gantt() -> None:
-    """Timeline. Deliberately labelled by month rather than by an exact date,
-    so the figure does not go stale depending on the day of submission."""
+    """The timeline. Labelled by month rather than by an exact date on purpose, so the figure does
+    not go stale depending on which day I submit."""
     D = dt.date
     tasks = [
         ("Project concept and proposal",            D(2026, 5, 4),  D(2026, 5, 17), "done"),
@@ -217,7 +216,7 @@ def gantt() -> None:
         else:
             ax.barh(y, (e - s).days, left=s, height=0.56, color=colours[status])
 
-    # Month-level marker rather than a specific day.
+    # A month-level marker rather than a specific day.
     marker = D(2026, 8, 18)
     ax.axvline(marker, color=NAVY, ls="--", lw=1.4, alpha=0.9)
     ax.text(marker, n + 0.9, "position at time of writing (mid-August)",
@@ -273,7 +272,7 @@ def _slog(x):
     return np.sign(x) * np.log1p(x.abs())
 
 # the tax rate means nothing on a loss, so blank it rather than letting
-# "tax as a fraction of a negative number" into the model
+# "tax as a fraction of a negative number" reach the model
 etr = _safe_div(out["income_tax_paid"], out["profit_before_tax"])
 etr[out["profit_before_tax"] <= 0] = np.nan
 out["effective_tax_rate"] = etr.clip(0, 1)
@@ -295,7 +294,7 @@ z      = self.encoder(seq)                     # attention mixes them
 return self.head(z[:, 0]).squeeze(-1)          # classify the [CLS] state
 ''',
     "listing_leakage": '''def test_no_single_feature_is_circular_with_label():
-    # The big one: guard against label leakage. If any single feature were
+    # The big one: a guard against label leakage. If any single feature were
     # nearly perfectly correlated with the target, the model would just be
     # reading the answer off that column and the whole exercise would be
     # meaningless.
@@ -310,22 +309,21 @@ return self.head(z[:, 0]).squeeze(-1)          # classify the [CLS] state
 def listings() -> None:
     """Render each code extract to a PNG with syntax highlighting.
 
-    Done as images so the code reads as a figure rather than as body prose.
-    Rendered large and then placed small in the document, so it stays sharp
-    if the reader zooms in.
+    Images rather than text, so the code reads as a figure instead of as body prose. Rendered large
+    and then placed small in the document, which keeps it sharp if the reader zooms in.
     """
     try:
         from pygments import highlight
         from pygments.formatters import ImageFormatter
         from pygments.lexers import PythonLexer
     except ImportError:
-        print("pygments not installed - skipping listing images")
+        print("pygments not installed - skipping the listing images")
         return
 
     for name, src in LISTINGS.items():
         formatter = ImageFormatter(
             font_name="DejaVu Sans Mono",
-            font_size=30,                 # large; scaled down on the page
+            font_size=30,                 # large here, scaled down on the page
             line_numbers=False,
             style="friendly",
             image_pad=18,
@@ -340,11 +338,11 @@ def listings() -> None:
 # 4. Refresh the EDA figures through the project's own code
 # --------------------------------------------------------------------------- #
 def refresh_eda() -> None:
-    """Regenerate the correlation heatmap (and the distribution grid) using
-    src/eda.py, so the report figure and the codebase never drift apart."""
+    """Regenerate the correlation heatmap through src/eda.py, so the figure in the report and the
+    code that produced it can never drift apart."""
     root = _ROOT
     if not (root / "src").is_dir():
-        print("src/ not found - skipping EDA refresh")
+        print("src/ not found - skipping the EDA refresh")
         return
     sys.path.insert(0, str(root))
     sys.path.insert(0, str(root / "src"))

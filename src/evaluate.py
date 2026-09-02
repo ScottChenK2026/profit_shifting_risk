@@ -1,20 +1,20 @@
 """
 evaluate.py
 -----------
-The shared toolbox every model is judged with - the same metrics, tests and
-plots applied to all four so the comparison is fair. Everything saves into
-``outputs/`` so the figures and tables can go straight into the report.
+The shared toolbox every model is judged with - the same metrics, tests and plots applied to all
+four, so the comparison is fair. Everything saves into ``outputs/`` so the figures and tables can
+go straight into the report.
 
-What's in here:
-  * the usual binary-classification metrics, plus the Brier score, which is a
-    calibration measure (when the model says 0.7, does that group really turn
-    out to be havens about 70% of the time?);
-  * DeLong's test - a way of asking whether one model's AUC really beats
-    another's or whether the gap could just be luck on this test set;
-  * an "audit budget" view (precision@k / top-decile capture). A real tax
-    authority can only dig into the top few percent of cases, so what matters
-    is how many actual havens land in that top slice - not overall accuracy;
-  * the ROC / PR / confusion / calibration / training-curve plots.
+What is in here:
+
+  * the usual binary-classification metrics, plus the Brier score, which measures calibration:
+    when the model says 0.7, does that group really turn out to be havens about 70% of the time?
+  * DeLong's test, a way of asking whether one model's AUC genuinely beats another's or whether
+    the gap could just be luck on this particular test set;
+  * an audit-budget view, precision@k and top-decile capture. A real tax authority can only dig
+    into the top few percent of cases, so what matters is how many actual havens land in that
+    slice, not overall accuracy;
+  * the ROC, PR, confusion, calibration and training-curve plots.
 """
 
 from __future__ import annotations
@@ -37,14 +37,14 @@ from config import FIGURE_DIR, METRIC_DIR
 
 
 def classification_metrics(y_true, y_prob, threshold=0.5) -> dict:
-    """The standard scorecard for one model: AUC, PR-AUC, Brier, and the
-    threshold-based numbers (F1/precision/recall) at the 0.5 cut-off.
+    """The standard scorecard for one model: AUC, PR-AUC, Brier, and the threshold-based numbers
+    (F1, precision, recall) at the 0.5 cut-off.
 
-    AUC is how well the score ranks a real haven above a non-haven - 0.5 is a
-    coin-flip, 1.0 is perfect. PR-AUC is the version that cares more about the
-    rare positives, which is what we have here. Brier is the calibration check.
+    AUC is how well the score ranks a real haven above a non-haven - 0.5 is a coin flip, 1.0 is
+    perfect. PR-AUC is the version that cares more about the rare positives, which is what we have
+    here. Brier is the calibration check.
     """
-    # Turn probabilities into yes/no at the chosen cut-off for the F1 etc.
+    # Turn probabilities into yes/no at the chosen cut-off, for F1 and friends.
     y_pred = (y_prob >= threshold).astype(int)
     return {
         "auc_roc": float(roc_auc_score(y_true, y_prob)),
@@ -58,12 +58,10 @@ def classification_metrics(y_true, y_prob, threshold=0.5) -> dict:
 
 
 def precision_at_k(y_true, y_prob, fractions=(0.05, 0.10, 0.20)) -> dict:
-    """The audit-budget view: if you only ever look at the top 5/10/20% of
-    cases by score, how clean is that pile (precision) and how much of the total
-    haven population did you manage to catch (recall)? This is the realistic
-    question - nobody audits everything, so what matters is the very top of the list.
-    """
-    # Sort everything from highest score to lowest, then walk down the slices.
+    """The audit-budget view. If you only ever look at the top 5, 10 or 20% of cases by score, how
+    clean is that pile, and how much of the total haven population did you manage to catch? This is
+    the realistic question, since nobody audits everything."""
+    # Sort from highest score down, then walk through the slices.
     order = np.argsort(y_prob)[::-1]
     y_sorted = np.asarray(y_true)[order]
     n, total_pos = len(y_true), float(np.sum(y_true))
@@ -81,10 +79,9 @@ def precision_at_k(y_true, y_prob, fractions=(0.05, 0.10, 0.20)) -> dict:
 
 # --------------------------------------------------------------------------- #
 # DeLong test for two correlated ROC AUCs.
-# In plain terms: when one model's AUC looks higher than another's, this checks
-# whether that gap is real or could just be chance. The two helpers below
-# (_compute_midrank and _fast_delong) are the standard machinery for it - I'm
-# treating them as a known recipe and not reinventing the maths.
+# In plain terms: when one model's AUC looks higher than another's, this checks whether the gap is
+# real or could just be chance. The two helpers below, _compute_midrank and _fast_delong, are the
+# standard machinery for it - a known recipe I am following rather than reinventing.
 # --------------------------------------------------------------------------- #
 def _compute_midrank(x):
     J = np.argsort(x)
@@ -123,10 +120,9 @@ def _fast_delong(predictions_sorted_transposed, label_1_count):
 
 
 def delong_roc_test(y_true, prob_a, prob_b) -> dict:
-    """Run the DeLong test on two models scored on the same data and hand back
-    both AUCs plus a p-value. A small p-value (say below 0.05) means the gap
-    between them is unlikely to be down to chance.
-    """
+    """Run the DeLong test on two models scored on the same data, and hand back both AUCs plus a
+    p-value. A small p-value, say under 0.05, means the gap between them is unlikely to be down to
+    chance."""
     y_true = np.asarray(y_true)
     order = (-y_true).argsort(kind="mergesort")
     label_1_count = int(y_true.sum())
@@ -143,10 +139,10 @@ def delong_roc_test(y_true, prob_a, prob_b) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# I/O + plots
+# Saving and plotting
 # --------------------------------------------------------------------------- #
 def save_metrics(metrics: dict, name: str) -> None:
-    """Dump one model's metrics dict to outputs/metrics/<name>.json."""
+    """Write one model's metrics dict to outputs/metrics/<name>.json."""
     path = METRIC_DIR / f"{name}.json"
     with open(path, "w") as fh:
         json.dump(metrics, fh, indent=2)
@@ -200,13 +196,12 @@ def plot_confusion(y_true, y_prob, name, threshold=0.5) -> None:
 
 
 def plot_calibration(curves, filename="calibration.png") -> None:
-    """Reliability plot: bucket the predictions and check whether, say, the
-    "around 0.7" bucket really comes out roughly 70% havens. A model sitting on
-    the diagonal is well calibrated; well above or below it is over/under-confident.
-    """
+    """Reliability plot: bucket the predictions and check whether the "around 0.7" bucket really
+    does come out roughly 70% havens. A model sitting on the diagonal is well calibrated; above or
+    below it means over- or under-confident."""
     plt.figure(figsize=(6, 5))
     for name, (y, prob) in curves.items():
-        # Quantile bins so each point is backed by a similar number of cases.
+        # Quantile bins, so every point is backed by a similar number of cases.
         frac_pos, mean_pred = calibration_curve(y, np.clip(prob, 0, 1),
                                                 n_bins=10, strategy="quantile")
         plt.plot(mean_pred, frac_pos, marker="o", label=name)
