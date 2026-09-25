@@ -94,25 +94,39 @@ def explain_mlp(model, X_background: np.ndarray, X_sample: np.ndarray,
             sv = sv[:, :, 0]       # there is only one output here, so take it
         mean_abs = np.abs(sv).mean(axis=0)
     except Exception as exc:       # pragma: no cover - version-dependent path
-        # KernelExplainer is slower but does not care about the model internals, which makes it a
-        # safe fallback. The sample sizes are trimmed to keep the runtime bearable.
-        print(f"[shap] DeepExplainer unavailable ({exc!r}); "
-              "falling back to KernelExplainer.")
+        # DeepExplainer reaches inside PyTorch's internals and breaks whenever those internals move;
+        # on the version this project now pins it fails outright. Two fallbacks rather than one,
+        # tried in order of how much they cost.
+        print(f"[shap] DeepExplainer unavailable ({exc!r}); trying GradientExplainer.")
+        try:
+            # GradientExplainer uses expected gradients. It only needs backpropagation to work, so
+            # it is far less sensitive to version drift than DeepExplainer, and it is fast enough
+            # that the full sample can be explained rather than a trimmed one.
+            explainer = shap.GradientExplainer(model, bg)
+            sv = np.asarray(explainer.shap_values(sample_t))
+            if sv.ndim == 3:
+                sv = sv[:, :, 0]
+            mean_abs = np.abs(sv).mean(axis=0)
+        except Exception as exc2:
+            # KernelExplainer is slower but treats the model as a black box, so it works whatever
+            # the library versions are. The sample sizes are trimmed to keep the runtime bearable.
+            print(f"[shap] GradientExplainer unavailable ({exc2!r}); "
+                  "falling back to KernelExplainer.")
 
-        # KernelExplainer needs a plain function from inputs to probabilities.
-        def f(x: np.ndarray) -> np.ndarray:
-            with torch.no_grad():
-                return model.predict_proba(
-                    torch.from_numpy(x.astype(np.float32))).numpy()
+            # KernelExplainer needs a plain function from inputs to probabilities.
+            def f(x: np.ndarray) -> np.ndarray:
+                with torch.no_grad():
+                    return model.predict_proba(
+                        torch.from_numpy(x.astype(np.float32))).numpy()
 
-        bg_small = shap.sample(X_background, min(50, len(X_background)),
-                               random_state=0)
-        explainer = shap.KernelExplainer(f, bg_small)
-        sv = explainer.shap_values(X_sample[:100], nsamples=100, silent=True)
-        sv = np.asarray(sv)
-        if sv.ndim == 3:
-            sv = sv[:, :, 0]
-        mean_abs = np.abs(sv).mean(axis=0)
+            bg_small = shap.sample(X_background, min(50, len(X_background)),
+                                   random_state=0)
+            explainer = shap.KernelExplainer(f, bg_small)
+            sv = np.asarray(explainer.shap_values(X_sample[:100], nsamples=100,
+                                                  silent=True))
+            if sv.ndim == 3:
+                sv = sv[:, :, 0]
+            mean_abs = np.abs(sv).mean(axis=0)
 
     return _bar_plot(mean_abs, feature_names,
                      "SHAP global importance - MLP", filename)

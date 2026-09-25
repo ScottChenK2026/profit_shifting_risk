@@ -77,18 +77,68 @@ class ProfitShiftingAutoencoder(nn.Module):
         return torch.mean((x - x_hat) ** 2, dim=1)
 
 
+def select_threshold(train_err: np.ndarray, percentile: float) -> float:
+    """The cut-off above which a reconstruction error counts as anomalous, as a percentile of the
+    errors on ordinary training rows."""
+    return float(np.percentile(train_err, percentile))
+
+
+def tune_threshold_on_validation(val_err: np.ndarray, y_val: np.ndarray,
+                                 grid=range(50, 100)) -> dict:
+    """Search percentiles for the cut-off that gives the best F1 on the validation year.
+
+    This needs saying clearly, because it cuts against the reason the autoencoder is in the project
+    at all. The model is trained without labels and that is its whole appeal: it cannot inherit the
+    assumptions baked into my tax-haven list. Choosing its threshold against validation labels does
+    not change how it was trained, but it does mean the deployed detector is no longer entirely
+    label-free - it is unsupervised in its scoring and supervised in where it draws the line.
+
+    It is offered because the alternative was worse. Fixing the cut-off at the 95th percentile of
+    training error, as the interim version did, produced three positive predictions out of 551 real
+    havens and a precision of 1.000 computed on those three cases. That number was meaningless and
+    reporting it invited a reader to think the model was near-perfect when its recall was 0.5%.
+
+    So both are reported: the label-free rule for what the method can do with no labels at all, and
+    this one for what it can do when a year of labels is available to calibrate it. The gap between
+    them is itself the finding.
+    """
+    best = {"percentile": None, "f1": -1.0, "threshold": None}
+    y = np.asarray(y_val).astype(int)
+    if y.sum() == 0:                                   # pragma: no cover - defensive
+        return best
+    for pct in grid:
+        thr = float(np.percentile(val_err, pct))
+        pred = (val_err >= thr).astype(int)
+        tp = float((pred & y).sum())
+        if tp == 0:
+            continue
+        precision = tp / max(pred.sum(), 1)
+        recall = tp / y.sum()
+        f1 = 2 * precision * recall / max(precision + recall, 1e-9)
+        if f1 > best["f1"]:
+            best = {"percentile": float(pct), "f1": float(f1), "threshold": thr,
+                    "precision": float(precision), "recall": float(recall)}
+    return best
+
+
 def train_autoencoder(
     X_train_neg: np.ndarray,
     X_val_neg: np.ndarray,
     config: dict | None = None,
     seed: int = RANDOM_SEED,
     verbose: bool = False,
+    X_val_all: np.ndarray | None = None,
+    y_val: np.ndarray | None = None,
 ) -> tuple[ProfitShiftingAutoencoder, dict]:
     """Train the autoencoder on normal, non-haven rows only.
 
     Both inputs being the negative class is deliberate, and is the whole point of the approach - see
     the module docstring. What comes back is the trained model plus a small dict of metadata: which
-    epoch was best, and the error threshold above which a row counts as anomalous.
+    epoch was best, and the error thresholds above which a row counts as anomalous.
+
+    ``X_val_all`` and ``y_val`` are the full validation year, positives included. They are used only
+    to tune the threshold, never to fit any weight, and only if supplied - leaving them out keeps
+    the method strictly label-free.
     """
     cfg = {**AE_CONFIG, **(config or {})}
     set_seed(seed)
@@ -152,7 +202,19 @@ def train_autoencoder(
     with torch.no_grad():
         train_err = model.reconstruction_error(
             torch.from_numpy(X_train_neg).to(device)).cpu().numpy()
-    threshold = float(np.percentile(train_err, cfg["threshold_percentile"]))
+    threshold = select_threshold(train_err, cfg["threshold_percentile"])
 
-    return model, {"best_epoch": best_epoch, "threshold": threshold,
-                   "best_val_mse": best_val}
+    meta = {"best_epoch": best_epoch, "threshold": threshold,
+            "threshold_percentile": cfg["threshold_percentile"],
+            "best_val_mse": best_val}
+
+    # If the full validation year was supplied, also report the cut-off a year of labels would have
+    # chosen. Both go into the metadata so the evaluation can quote the label-free number and the
+    # tuned one side by side rather than presenting either as the whole story.
+    if X_val_all is not None and y_val is not None:
+        with torch.no_grad():
+            val_err = model.reconstruction_error(
+                torch.from_numpy(X_val_all).to(device)).cpu().numpy()
+        meta["tuned"] = tune_threshold_on_validation(val_err, y_val)
+
+    return model, meta

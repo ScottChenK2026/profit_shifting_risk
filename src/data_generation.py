@@ -185,7 +185,18 @@ def load_cbcr(prefer_real: bool = True, seed: int = RANDOM_SEED) -> pd.DataFrame
 
     if synth_path.exists():
         df = pd.read_csv(synth_path)
-        if len(df) >= MIN_REAL_ROWS:
+        # Row count alone is not enough. A cache written by an older version of this file can be
+        # the right size but the wrong shape - missing the activity mix or the profit panels, say -
+        # and feature engineering would then fail further downstream with a confusing KeyError.
+        # Check the columns too, and regenerate if any are missing.
+        missing = [c for c in CBCR_COLUMNS if c not in df.columns]
+        if len(df) < MIN_REAL_ROWS:
+            print(f"[data] {synth_path.name} has only {len(df)} rows (<{MIN_REAL_ROWS}); "
+                  "regenerating.")
+        elif missing:
+            print(f"[data] {synth_path.name} is stale - missing {len(missing)} column(s): "
+                  f"{', '.join(missing[:6])}{' ...' if len(missing) > 6 else ''}. Regenerating.")
+        else:
             print(f"[data] Using cached synthetic dataset: {synth_path.name}")
             return add_supplementary_columns(df)
 

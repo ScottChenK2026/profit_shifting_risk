@@ -111,7 +111,11 @@ def main() -> dict:
         probs[name] = np.load(_probs_path(name)); print(f"[skip] {name} cached")
     else:
         print("\n=== 4a. XGBoost ===")
-        xgb, params = train_xgboost(s.X_train, s.y_train)
+        # The validation year goes in so the grid is scored on exactly the year the neural models
+        # early-stop on. Without it the baseline was being tuned on less data than the models it is
+        # meant to be the bar for - see the note in models/xgb_baseline.py.
+        xgb, params = train_xgboost(s.X_train, s.y_train,
+                                    X_val=s.X_val, y_val=s.y_val)
         probs[name] = xgb.predict_proba(s.X_test)[:, 1]
         np.save(_probs_path(name), probs[name])
         xgb.save_model(str(MODEL_DIR / "xgboost.json"))
@@ -157,19 +161,42 @@ def main() -> dict:
         print("\n=== 4d. Autoencoder ===")
         # The autoencoder only ever sees the ordinary, non-haven rows. It learns what a normal
         # record looks like, so anything it struggles to rebuild is unusual and more suspicious.
+        # The full validation year is passed in as well, labels included. It is used only to work
+        # out what cut-off a year of labels would have chosen, never to fit a weight - see the note
+        # in models/autoencoder.py about why both thresholds are reported rather than one.
         ae, meta = train_autoencoder(s.X_train[s.y_train == 0],
-                                     s.X_val[s.y_val == 0], verbose=True)
+                                     s.X_val[s.y_val == 0], verbose=True,
+                                     X_val_all=s.X_val, y_val=s.y_val)
+        err_val = ae.reconstruction_error(torch.from_numpy(s.X_val)).numpy()
         err = ae.reconstruction_error(torch.from_numpy(s.X_test)).numpy()
-        # Reconstruction error is not a probability, so it gets min-max scaled into [0, 1] purely
-        # so it can be used as a ranking score. It is never read as a calibrated probability, which
-        # is why the autoencoder is reported only as a ranker and left out of the calibration plot.
-        probs[name] = (err - err.min()) / (err.max() - err.min() + 1e-9)
+        # Reconstruction error is not a probability, so it is put on a 0-1 scale to be usable as a
+        # ranking score. The scale comes from the validation year so that no statistic of the test
+        # year shapes how test scores are expressed (the first version scaled by the test range,
+        # which is a small leak even though it cannot change the ranking). The 1.000 precision on
+        # three cases in that version was a threshold problem, not a scaling one: the fixed
+        # percentile cut-off sat above almost every test error. The validation-tuned threshold in
+        # models/autoencoder.py is the fix for that.
+        lo, hi = float(err_val.min()), float(err_val.max())
+        span = max(hi - lo, 1e-9)
+        probs[name] = np.clip((err - lo) / span, 0.0, 1.0)
         np.save(_probs_path(name), probs[name])
-        nt = float((meta["threshold"] - err.min())
-                   / (err.max() - err.min() + 1e-9))
-        ev.save_metrics({**ev.classification_metrics(
-            s.y_test, probs[name], threshold=min(max(nt, 0), 0.999)),
-            **{k: meta[k] for k in ("best_epoch", "threshold")}}, name)
+        def _norm(t):
+            return float(min(max((t - lo) / span, 0.0), 0.999))
+
+        ae_metrics = ev.classification_metrics(s.y_test, probs[name],
+                                               threshold=_norm(meta["threshold"]))
+        ae_metrics.update({k: meta[k] for k in ("best_epoch", "threshold")})
+        # The label-free cut-off flags almost nothing, so its precision is computed on a handful of
+        # cases and means very little. Reporting the tuned cut-off alongside it is what stops that
+        # number being read as a result.
+        if meta.get("tuned", {}).get("threshold") is not None:
+            tuned = ev.classification_metrics(s.y_test, probs[name],
+                                              threshold=_norm(meta["tuned"]["threshold"]))
+            ae_metrics["tuned_threshold"] = {
+                "validation_percentile": meta["tuned"]["percentile"],
+                **{k: tuned[k] for k in ("f1", "precision", "recall", "confusion_matrix")},
+            }
+        ev.save_metrics(ae_metrics, name)
 
     # ---- 5-6. Assembly: plots, audit budget, significance ------------------ #
     print("\n=== 5-6. Comparative evaluation ===")
@@ -215,7 +242,10 @@ def main() -> dict:
                 xgb, s.X_test[:400], s.feature_names)[:5]
         if (MODEL_DIR / "mlp_state.pt").exists():
             from models.mlp import ProfitShiftingMLP
-            mlp = ProfitShiftingMLP(input_dim=len(FEATURE_COLUMNS))
+            from config import MLP_CONFIG
+            mlp = ProfitShiftingMLP(input_dim=len(FEATURE_COLUMNS),
+                                    hidden_dims=MLP_CONFIG["hidden_dims"],
+                                    dropout_p=MLP_CONFIG["dropout_p"])
             mlp.load_state_dict(torch.load(MODEL_DIR / "mlp_state.pt"))
             summary["shap_mlp_top"] = explain_mlp(
                 mlp, s.X_train[:200], s.X_test[:300], s.feature_names)[:5]
