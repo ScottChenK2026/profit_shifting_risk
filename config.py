@@ -139,3 +139,77 @@ XGB_PARAM_GRID: dict = {
     "learning_rate": [0.03, 0.1],
     "n_estimators": [300, 600],
 }
+
+# --------------------------------------------------------------------------- #
+# Feature blocks: the three families of inputs, plus the loss signal
+# --------------------------------------------------------------------------- #
+# Grouping the features this way lets the ablation study in src/ablation.py ask a question SHAP
+# cannot answer on its own: not "which feature does the model lean on?" but "how much worse is the
+# model if this whole family of inputs is taken away?". The activity-mix block is the one this
+# project claims as its contribution, so being able to delete it and measure the damage matters.
+FEATURE_BLOCKS: dict[str, list[str]] = {
+    "profitability_tax": [
+        "profit_margin", "related_party_share", "effective_tax_rate", "etr_accrued",
+    ],
+    "substance": [
+        "profit_per_employee", "revenue_per_employee", "profit_per_asset",
+        "assets_per_employee", "capital_per_employee", "employees_per_entity",
+        "entities_per_group",
+    ],
+    "activity_mix": [
+        "holding_share", "ip_share", "igf_share", "dormant_share",
+        "shifting_activity_share", "real_activity_share",
+    ],
+    "loss_shifting": ["loss_shift_ratio"],
+}
+
+BLOCK_LABELS: dict[str, str] = {
+    "profitability_tax": "Profitability and tax",
+    "substance": "Economic substance",
+    "activity_mix": "Business-activity mix",
+    "loss_shifting": "Loss shifting",
+}
+
+# --------------------------------------------------------------------------- #
+# Capacity-and-regularisation study (the deep-learning workflow the template asks for)
+# --------------------------------------------------------------------------- #
+# CM3015 Project Idea 2 asks the student to "improve the chosen test metrics by network scaling up
+# and regularisation", following the workflow in Chollet (2018): get a model that can overfit
+# first, then fight the overfitting. These are the rungs of that ladder. Stage A grows capacity
+# with the regularisation switched off; stage B puts it back on, one mechanism at a time.
+MLP_CAPACITY_LADDER: list[dict] = [
+    {"tag": "A1 tiny",    "hidden_dims": [16],            "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A2 small",   "hidden_dims": [64, 32],        "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A3 medium",  "hidden_dims": [128, 64, 32],   "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A4 large",   "hidden_dims": [512, 256, 128], "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "B1 +dropout",        "hidden_dims": [512, 256, 128], "dropout_p": 0.3, "weight_decay": 0.0},
+    {"tag": "B2 +decay",          "hidden_dims": [512, 256, 128], "dropout_p": 0.3, "weight_decay": 1e-4},
+    {"tag": "B3 shrink+regular",  "hidden_dims": [128, 64, 32],   "dropout_p": 0.3, "weight_decay": 1e-4},
+]
+
+FT_CAPACITY_LADDER: list[dict] = [
+    {"tag": "A1 tiny",   "d_token": 8,  "n_layers": 1, "n_heads": 2, "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A2 small",  "d_token": 16, "n_layers": 2, "n_heads": 4, "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A3 medium", "d_token": 32, "n_layers": 3, "n_heads": 4, "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "A4 large",  "d_token": 64, "n_layers": 4, "n_heads": 8, "dropout_p": 0.0, "weight_decay": 0.0},
+    {"tag": "B1 +dropout",       "d_token": 64, "n_layers": 4, "n_heads": 8, "dropout_p": 0.2, "weight_decay": 0.0},
+    {"tag": "B2 +decay",         "d_token": 64, "n_layers": 4, "n_heads": 8, "dropout_p": 0.2, "weight_decay": 1e-4},
+    {"tag": "B3 shrink+regular", "d_token": 32, "n_layers": 3, "n_heads": 4, "dropout_p": 0.1, "weight_decay": 1e-5},
+]
+
+# Fractions of the training years used for the learning-curve study. The question is whether the
+# neural models are losing because there is simply not enough data for them, which is what the
+# tabular deep-learning literature predicts at this sample size.
+LEARNING_CURVE_FRACTIONS: list[float] = [0.1, 0.25, 0.5, 0.75, 1.0]
+
+# --------------------------------------------------------------------------- #
+# Audit capacity: what share of cases a reviewer can actually look at
+# --------------------------------------------------------------------------- #
+# The 0.5 cut-off is an arbitrary default that suits none of these models, because all four are
+# trained with the rare class weighted up. A reviewing team has a capacity instead, so the
+# threshold should be whatever puts that many cases in front of them. 10% is the working assumption
+# and src/calibration.py derives the matching cut-off from the validation year.
+AUDIT_CAPACITY: float = 0.10
+
+# How many resamples the grouped bootstrap uses when putting a confidence interval around AUC.
+BOOTSTRAP_RESAMPLES: int = 1000

@@ -110,3 +110,40 @@ def is_real_jurisdiction(code: str) -> bool:
     list above."""
     return (isinstance(code, str) and len(code) == 3 and code.isalpha()
             and code.upper() == code and code not in COUNTERPART_AGGREGATES)
+
+
+# --- Alternative haven definitions, for the sensitivity study --------------- #
+# The list above is a judgement call, and the write-up is candid that the whole project rests on
+# it. Two of the arguments against it are worth testing rather than just conceding.
+#
+# The first is that several European countries on the list are contested. The Netherlands,
+# Switzerland, Ireland and Singapore are conduits in Garcia-Bernardo et al. (2017) rather than end
+# destinations: real businesses operate there, and calling them havens is defensible but arguable.
+# CONTESTED_CONDUITS names them so src/label_sensitivity.py can drop them and see what changes.
+#
+# The second is that the list mixes two different things - the sinks where profit comes to rest and
+# the conduits it travels through. STRICT_SINKS keeps only the former, which is the narrowest
+# reading anyone would accept, and is the harder task because the obvious European cases are gone.
+# These are exactly the five conduits Garcia-Bernardo et al. (2017) name. The United Kingdom is
+# among them but never made it onto my haven list in the first place, which is itself a reminder
+# that the list embodies choices; the other four are on it and are the ones worth testing.
+CONTESTED_CONDUITS: set[str] = {"NLD", "CHE", "IRL", "SGP", "GBR"}
+
+STRICT_SINKS: set[str] = TAX_HAVENS - CONTESTED_CONDUITS
+
+
+def haven_set(variant: str = "baseline") -> set[str]:
+    """Return the set of jurisdiction codes counted as havens under a given labelling.
+
+    "baseline" is the combined list used throughout the main results. "strict_sinks" drops the
+    contested conduits. "conduits_only" keeps just those contested cases that appear on the baseline list, which is a deliberately
+    awkward variant: if the model can still separate them from ordinary countries, the activity mix
+    is picking up something about structure rather than merely re-learning the obvious cases.
+    """
+    if variant == "baseline":
+        return set(TAX_HAVENS)
+    if variant == "strict_sinks":
+        return set(STRICT_SINKS)
+    if variant == "conduits_only":
+        return set(CONTESTED_CONDUITS) & set(TAX_HAVENS)
+    raise ValueError(f"unknown label variant: {variant!r}")
