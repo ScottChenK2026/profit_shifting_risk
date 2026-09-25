@@ -141,7 +141,7 @@ profit_shifting_risk/
 │   ├── reference_data.py    # haven lists + activity/measure code maps
 │   ├── data_generation.py   # real loader + synthetic fallback
 │   ├── features.py          # feature engineering (4 blocks) + label
-│   ├── preprocessing.py     # temporal / random splits, leakage-safe scaling
+│   ├── preprocessing.py     # temporal/random splits, leakage-safe scaling
 │   ├── eda.py               # EDA figures
 │   ├── evaluate.py          # metrics, DeLong, precision@k, calibration, plots
 │   ├── explain.py           # SHAP (Tree / Gradient / Kernel explainers)
