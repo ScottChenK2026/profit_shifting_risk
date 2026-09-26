@@ -1,0 +1,92 @@
+# Runs the project from a clean checkout on Windows, macOS (Apple silicon) and Linux: install the
+# pinned requirements, run the unit tests, train all four models on the OECD table in data/, score
+# with the CLI, and compare the headline AUCs with the figures in the report.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  run:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      MPLBACKEND: Agg
+      PYTHONUTF8: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pinned requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # macOS: XGBoost needs the OpenMP runtime, and PyTorch's bundled copy is pointed at the same
+      # one so only one copy is loaded (see "Platform notes" in the README).
+      - name: macOS OpenMP setup
+        if: runner.os == 'macOS'
+        run: |
+          brew install libomp
+          TORCH_LIB="$(python -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib"))')"
+          mv "$TORCH_LIB/libomp.dylib" "$TORCH_LIB/libomp.dylib.bak"
+          ln -s "$(brew --prefix libomp)/lib/libomp.dylib" "$TORCH_LIB/libomp.dylib"
+
+      - name: Library versions
+        run: python -c "import sys, numpy, pandas, sklearn, xgboost, torch, shap; print(sys.version); print('numpy', numpy.__version__, '| pandas', pandas.__version__, '| scikit-learn', sklearn.__version__, '| xgboost', xgboost.__version__, '| torch', torch.__version__, '| shap', shap.__version__)"
+
+      - name: Unit tests
+        run: pytest tests/ -q
+
+      - name: Train and evaluate the four models
+        run: python run_pipeline.py --fresh
+
+      - name: Score with the command-line tool
+        run: |
+          python src/cli.py --csv data/oecd_cbcr_wide.csv --top 10
+          python src/cli.py --total-revenues 1000 --related-party-revenues 850 --profit-before-tax 600 --income-tax-paid 12 --num-employees 5 --num-entities 40 --tangible-assets 30 --stated-capital 10 --holding-establishments 40 --igf-establishments 15 --real-establishments 2
+
+      # Test-year AUCs reported in the final report. A small drift in the neural models is expected
+      # across operating systems; anything beyond the tolerance fails the job.
+      - name: Compare with the reported results
+        run: |
+          python - <<'PY'
+          import json
+          reported = {"xgboost": 0.948, "ft_transformer": 0.920, "mlp": 0.919, "autoencoder": 0.769}
+          tolerance = {"xgboost": 0.005, "ft_transformer": 0.015, "mlp": 0.015, "autoencoder": 0.03}
+          got = json.load(open("outputs/metrics/pipeline_summary.json"))["metrics"]
+          bad = []
+          print(f"{'model':<16}{'reported':>10}{'this run':>10}{'diff':>9}")
+          for m, r in reported.items():
+              a = got[m]["auc_roc"]
+              print(f"{m:<16}{r:>10.3f}{a:>10.3f}{a - r:>+9.3f}")
+              if abs(a - r) > tolerance[m]:
+                  bad.append(m)
+          if bad:
+              raise SystemExit(f"AUC outside tolerance for: {', '.join(bad)}")
+          PY
+
+      - name: Keep the metrics and figures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.os }}
+          path: |
+            outputs/metrics
+            outputs/figures
+          if-no-files-found: ignore
