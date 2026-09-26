@@ -2,20 +2,23 @@
 evaluate.py
 -----------
 The shared toolbox every model is judged with - the same metrics, tests and plots applied to all
-four, so the comparison is fair. Everything saves into ``outputs/`` so the figures and tables can
-go straight into the report.
+four, so the comparison is fair. Everything saves into ``outputs/``, and I pasted the figures and 
+tables straight into the final written report.
 
 What is in here:
 
-  * the usual binary-classification metrics, plus the Brier score, which measures calibration:
+1. the usual binary-classification metrics, plus the Brier score, which measures calibration:
     when the model says 0.7, does that group really turn out to be havens about 70% of the time?
-  * DeLong's test, a way of asking whether one model's AUC genuinely beats another's or whether
-    the gap could just be luck on this particular test set;
-  * an audit-budget view, precision@k and top-decile capture. A real tax authority can only dig
-    into the top few percent of cases, so what matters is how many actual havens land in that
-    slice, not overall accuracy;
-  * the ROC, PR, confusion, calibration and training-curve plots.
+2. DeLong's test, a way of asking whether one model's AUC really beats another's or whether the
+    gap could just be luck on this particular test set. It treats every row as independent, which
+    these are not, so run_experiments.py adds a bootstrap over whole jurisdictions (stability.py)
+    as the stricter check;
+3. an audit-budget view, precision@k. A real tax authority can only dig into the top few percent
+    of cases, so what matters is how many actual havens land in that slice and what share of all
+    havens it catches, not overall accuracy;
+4. the ROC, PR, confusion, calibration and training-curve plots.
 """
+
 
 from __future__ import annotations
 
@@ -37,14 +40,15 @@ from config import FIGURE_DIR, METRIC_DIR
 
 
 def classification_metrics(y_true, y_prob, threshold=0.5) -> dict:
-    """The standard scorecard for one model: AUC, PR-AUC, Brier, and the threshold-based numbers
-    (F1, precision, recall) at the 0.5 cut-off.
-
+    """The standard scorecard for one model. AUC, PR-AUC and Brier use the scores directly; F1,
+    precision, recall and the confusion matrix need a yes/no decision, so they depend on
+    ``threshold`` - 0.5 unless the caller passes another, as the autoencoder's scoring does.
+    
     AUC is how well the score ranks a real haven above a non-haven - 0.5 is a coin flip, 1.0 is
     perfect. PR-AUC is the version that cares more about the rare positives, which is what we have
     here. Brier is the calibration check.
     """
-    # Turn probabilities into yes/no at the chosen cut-off, for F1 and friends.
+    # Turn probabilities into yes/no at the chosen cut-off, for F1 and other metrics.
     y_pred = (y_prob >= threshold).astype(int)
     return {
         "auc_roc": float(roc_auc_score(y_true, y_prob)),

@@ -10,8 +10,8 @@ architecture beats the simpler MLP and the XGBoost baseline on this kind of data
 The idea, in plain terms:
 
 1. Feature tokeniser. Transformers normally work on a sequence of word tokens. There are no words
-   here, so each individual feature value is turned into its own small learned vector, an
-   embedding. A row of twenty numbers becomes a sequence of twenty vectors, one token per feature.
+   here, so each individual feature value is turned into its own small learned vector, an embedding. 
+   A row of eighteen numbers becomes a sequence of eighteen vectors, one token per feature.
 2. A special learnable [CLS] token is stuck on the front. Think of it as a blank notepad that the
    model fills in as it reads the row.
 3. The Transformer layers then let every token look at every other token, which is self-attention,
@@ -35,7 +35,7 @@ from models import TrainHistory, set_seed
 
 class NumericalFeatureTokenizer(nn.Module):
     """Turns each single feature value into its own learned vector. Every feature gets its own
-    weight and bias, learned during training, so the model can represent "feature 3 = 1.2"
+    weight and bias, learned during training, so the model can represent e.g., "feature 3 = 1.2"
     differently from "feature 7 = 1.2". Those per-feature vectors are what the Transformer layers
     then reason over."""
 
@@ -69,7 +69,11 @@ class FTTransformer(nn.Module):
             d_model=d_token, nhead=n_heads, dim_feedforward=d_token * 2,
             dropout=dropout_p, activation="gelu", batch_first=True,
             norm_first=True)
-        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        # enable_nested_tensor is a speed-up for padded batches, which this model never uses, and
+        # PyTorch switches it off anyway when norm_first=True (with a warning). Turning it off here
+        # silences the warning; the predictions are identical either way.
+        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers,
+                                             enable_nested_tensor=False)
         # A small output head that reads the [CLS] summary and emits one score.
         self.head = nn.Sequential(
             nn.LayerNorm(d_token), nn.GELU(), nn.Linear(d_token, 1))
@@ -93,16 +97,16 @@ class FTTransformer(nn.Module):
 
 
 def train_ft_transformer(X_train, y_train, X_val, y_val, config=None,
-                         seed: int = RANDOM_SEED, verbose: bool = False):
-    """Train the FT-Transformer using the same early-stopping recipe as the MLP, and return the
-    best model by validation loss along with its loss history."""
+    seed: int = RANDOM_SEED, verbose: bool = False):
+    """Train the FT-Transformer with the same early-stopping recipe as the MLP (though with AdamW
+    rather than Adam), and return the best model by validation loss along with its loss history."""
     cfg = {**FT_TRANSFORMER_CONFIG, **(config or {})}
     set_seed(seed)
     device = torch.device("cpu")
 
     model = FTTransformer(n_features=X_train.shape[1], d_token=cfg["d_token"],
-                          n_heads=cfg["n_heads"], n_layers=cfg["n_layers"],
-                          dropout_p=cfg["dropout_p"]).to(device)
+            n_heads=cfg["n_heads"], n_layers=cfg["n_layers"],
+            dropout_p=cfg["dropout_p"]).to(device)
     # The same imbalance handling as the MLP: weight the rare haven class up by neg/pos so the
     # model cannot win by always predicting "not a haven".
     n_pos = float(y_train.sum())
@@ -112,7 +116,7 @@ def train_ft_transformer(X_train, y_train, X_val, y_val, config=None,
     # AdamW is Adam with cleaner weight decay, and it is the optimiser the Transformer literature
     # recommends, so I follow suit.
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"],
-                            weight_decay=cfg["weight_decay"])
+        weight_decay=cfg["weight_decay"])
 
     ds = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train))
     loader = DataLoader(ds, batch_size=cfg["batch_size"], shuffle=True)

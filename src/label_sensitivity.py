@@ -1,7 +1,7 @@
 """
 label_sensitivity.py
 --------------------
-The study the interim report promised and could not yet deliver.
+The study my interim report promised and could not yet deliver at the time of the written exam.
 
 Everything in this project is predicted against a proxy. There is no register of confirmed profit
 shifting, so the target is membership of a combined tax-haven list assembled from the EU's
@@ -64,9 +64,9 @@ def relabel(feats: pd.DataFrame, variant: str) -> pd.DataFrame:
 
 
 def run_label_sensitivity(feats: pd.DataFrame,
-                          models=("xgboost", "mlp", "ft_transformer"),
-                          variants=LABEL_VARIANTS, seed: int = RANDOM_SEED,
-                          verbose: bool = True) -> pd.DataFrame:
+    models=("xgboost", "mlp", "ft_transformer"),
+    variants=LABEL_VARIANTS, seed: int = RANDOM_SEED,
+    verbose: bool = True) -> pd.DataFrame:
     """Re-run the whole out-of-time evaluation under each label definition.
 
     The splits are rebuilt from scratch for each variant, so the scaler and the imputation medians

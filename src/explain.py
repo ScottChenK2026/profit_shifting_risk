@@ -5,13 +5,16 @@ Asks each trained model which features actually drove its predictions, using SHA
 feature a signed contribution for every prediction; averaging the absolute values across many cases
 gives a global sense of which features matter most overall.
 
-SHAP has several engines and which one works depends on the model and, annoyingly, on the exact
-library versions installed. So for the MLP I try the fast gradient-based DeepExplainer first and
-fall back quietly to the slower but universal KernelExplainer if that combination chokes. XGBoost
-is a tree model, so it gets the exact TreeExplainer.
+SHAP has several engines, and which one works depends on the model and, annoyingly, on the exact
+library versions installed. XGBoost is a tree model, so it gets the exact TreeExplainer, with
+XGBoost's own built-in version of the same calculation as a fallback. For the MLP three engines are
+tried in order of cost: DeepExplainer, then GradientExplainer, then the slow but universal
+KernelExplainer, which treats the model as a black box. With the versions this project pins, the
+first two fail on this network, so the MLP figure comes from KernelExplainer, run on the first 100
+rows of the sample against 50 background rows.
 
 Either way the output is the same: a bar chart of mean absolute SHAP values, saved into
-``outputs/figures``.
+``outputs/figures``, and the ranked (feature, value) list handed back to the pipeline.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from config import FIGURE_DIR
 
 
 def _bar_plot(mean_abs: np.ndarray, feature_names: list[str],
-              title: str, filename: str) -> list[tuple[str, float]]:
+    title: str, filename: str) -> list[tuple[str, float]]:
     # Shared helper: draw the importance bars with the biggest at the top, and hand back the
     # (feature, value) pairs so the pipeline can log the top few.
     order = np.argsort(mean_abs)[::-1]
@@ -63,7 +66,7 @@ def explain_xgboost(model, X_sample: np.ndarray, feature_names: list[str],
     except Exception as exc:       # pragma: no cover - version-dependent path
         # The version-mismatch fallback described above.
         print(f"[shap] TreeExplainer unavailable ({exc!r}); "
-              "using XGBoost native pred_contribs.")
+            "using XGBoost native pred_contribs.")
         import xgboost as xgb
         booster = model.get_booster()
         dmat = xgb.DMatrix(X_sample, feature_names=list(feature_names))
@@ -72,15 +75,16 @@ def explain_xgboost(model, X_sample: np.ndarray, feature_names: list[str],
 
     mean_abs = np.abs(sv).mean(axis=0)
     return _bar_plot(mean_abs, feature_names,
-                     "SHAP global importance - XGBoost", filename)
+        "SHAP global importance - XGBoost", filename)
 
 
 def explain_mlp(model, X_background: np.ndarray, X_sample: np.ndarray,
                 feature_names: list[str],
                 filename: str = "shap_mlp.png") -> list[tuple[str, float]]:
-    """Feature importance for the MLP. Tries the fast gradient-based DeepExplainer first and drops
-    to the model-agnostic KernelExplainer if the installed shap and torch versions cannot handle
-    it. The background sample is the baseline SHAP compares each prediction against."""
+    """Feature importance for the MLP. Tries three SHAP engines in order of cost - DeepExplainer,
+    GradientExplainer, then the model-agnostic KernelExplainer - and uses the first that works
+    with the installed shap and torch versions. On the pinned versions it is KernelExplainer. The
+    background sample is the baseline SHAP compares each prediction against."""
     model.eval()
     bg = torch.from_numpy(X_background.astype(np.float32))
     sample_t = torch.from_numpy(X_sample.astype(np.float32))
@@ -99,9 +103,10 @@ def explain_mlp(model, X_background: np.ndarray, X_sample: np.ndarray,
         # tried in order of how much they cost.
         print(f"[shap] DeepExplainer unavailable ({exc!r}); trying GradientExplainer.")
         try:
-            # GradientExplainer uses expected gradients. It only needs backpropagation to work, so
-            # it is far less sensitive to version drift than DeepExplainer, and it is fast enough
-            # that the full sample can be explained rather than a trimmed one.
+            # GradientExplainer uses expected gradients and only needs backpropagation, so it is
+            # less exposed to version changes than DeepExplainer. It still fails on this MLP: the
+            # network returns a one-dimensional output and GradientExplainer expects one column per
+            # output, so in practice the run falls through to KernelExplainer below.
             explainer = shap.GradientExplainer(model, bg)
             sv = np.asarray(explainer.shap_values(sample_t))
             if sv.ndim == 3:
@@ -109,9 +114,10 @@ def explain_mlp(model, X_background: np.ndarray, X_sample: np.ndarray,
             mean_abs = np.abs(sv).mean(axis=0)
         except Exception as exc2:
             # KernelExplainer is slower but treats the model as a black box, so it works whatever
-            # the library versions are. The sample sizes are trimmed to keep the runtime bearable.
+            # the library versions are. It is the engine that produces the MLP figure, and the
+            # sample sizes are trimmed to keep the runtime bearable.
             print(f"[shap] GradientExplainer unavailable ({exc2!r}); "
-                  "falling back to KernelExplainer.")
+                "falling back to KernelExplainer.")
 
             # KernelExplainer needs a plain function from inputs to probabilities.
             def f(x: np.ndarray) -> np.ndarray:

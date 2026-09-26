@@ -4,11 +4,11 @@ model_runner.py
 One small function that every study in this project calls: hand it arrays and a model name, get
 back that model's scores on the validation and test sets.
 
-It exists because the experiments added after the interim report - the ablation, the capacity
-ladder, the learning curves, the label-sensitivity runs - all do the same thing to a different
-slice of data, and without a shared entry point each of them would grow its own slightly different
-copy of the training code. That is how two experiments end up not being comparable for a reason
-nobody notices until it is in the report.
+It exists because the experiments added after I received the feedback from the interim report - 
+the ablation, the capacity ladder, the learning curves, the label-sensitivity runs - all do the 
+same thing to a different slice of data, and without a shared entry point each of them would grow 
+its own slightly different copy of the training code. That is how two experiments end up not being 
+comparable for a reason nobody notices until it is in the report.
 
 Returning validation scores as well as test scores is deliberate. Everything that has to be fitted
 after training - the calibration correction, the review threshold, the weights of the hybrid score -
@@ -46,7 +46,7 @@ def _count_parameters(model) -> int:
 
 
 def run_model(name: str, X_train, y_train, X_val, y_val, X_test,
-              config: dict | None = None, seed: int = RANDOM_SEED) -> ModelRun:
+    config: dict | None = None, seed: int = RANDOM_SEED) -> ModelRun:
     """Train one model and score it.
 
     ``config`` overrides whatever that model's defaults are in config.py, which is what lets the
@@ -61,7 +61,7 @@ def run_model(name: str, X_train, y_train, X_val, y_val, X_test,
     if name == "xgboost":
         from models.xgb_baseline import train_xgboost
         model, params = train_xgboost(X_train, y_train, X_val=X_val, y_val=y_val,
-                                      param_grid=(config or {}).get("param_grid"), seed=seed)
+                        param_grid=(config or {}).get("param_grid"), seed=seed)
         return ModelRun(
             name=name,
             p_val=model.predict_proba(X_val)[:, 1],
@@ -107,8 +107,8 @@ def run_model(name: str, X_train, y_train, X_val, y_val, X_test,
         err_test = model.reconstruction_error(torch.from_numpy(X_test)).numpy()
         # Reconstruction error is not a probability. Both sets are put on a common 0-1 scale using
         # the validation range only, so the test scores are transformed by something fitted before
-        # the test year was looked at, and a test row more extreme than anything in validation is
-        # allowed to land outside the range rather than being quietly squashed back into it.
+        # the test year was looked at. Test rows more extreme than anything in validation are clipped 
+        # to the ends of the range, which can create ties at 0 or 1 but changes no other ordering.
         lo, hi = float(err_val.min()), float(err_val.max())
         span = max(hi - lo, 1e-9)
         return ModelRun(

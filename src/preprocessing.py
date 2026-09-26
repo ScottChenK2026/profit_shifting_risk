@@ -1,14 +1,15 @@
 """
 preprocessing.py
 ----------------
-Takes the engineered features and gets them ready for a model: splits the data into train,
+This script takes the engineered features and gets them ready for a model: splits the data into train,
 validation and test, fills any gaps, and rescales the numbers.
 
 By default it splits by time - train on the earliest years, tune on the next, test on the most
 recent, with the year lists living in config.py. That is deliberate. Predicting a later year from
 earlier ones is both more realistic and a tougher test than shuffling everything, and it rules out
-a sneaky form of cheating where almost-identical rows from the same year land in both the training
-and the test set. A plain random split is also here, but only for comparison experiments.
+a sneaky form of cheating where the same country pair, reported in neighbouring years with nearly
+identical figures, lands in both the training and the test set. A plain random split is also here,
+but only for comparison experiments.
 
 One detail matters for fairness: the fill-in values and the rescaling are worked out on the
 training data alone, then applied unchanged to validation and test. If the test set had a hand in
@@ -91,22 +92,19 @@ def prepare_temporal_splits(feats: pd.DataFrame) -> DataSplits:
 
 
 def prepare_random_splits(feats: pd.DataFrame, seed: int = RANDOM_SEED
-                          ) -> DataSplits:
+    ) -> DataSplits:
     """The comparison split: shuffle everything and slice off test and validation chunks at random.
     Stratifying keeps the haven and non-haven balance roughly the same in each chunk, which matters
     because havens are the rare case and a slice with almost none would be useless."""
     df = feats.reset_index(drop=True)
     y = df[TARGET_COLUMN].values
     idx = np.arange(len(df))
-    idx_tv, idx_te = train_test_split(idx, test_size=TEST_SIZE, stratify=y,
-                                      random_state=seed)
+    idx_tv, idx_te = train_test_split(idx, test_size=TEST_SIZE, stratify=y, random_state=seed)
     # Take the validation slice out of what is left after removing test, so the final proportions
     # come out as intended rather than slightly off.
     rel_val = VAL_SIZE / (1 - TEST_SIZE)
-    idx_tr, idx_va = train_test_split(idx_tv, test_size=rel_val,
-                                      stratify=y[idx_tv], random_state=seed)
-    return _assemble(df.iloc[idx_tr].copy(), df.iloc[idx_va].copy(),
-                     df.iloc[idx_te].copy(), "random")
+    idx_tr, idx_va = train_test_split(idx_tv, test_size=rel_val, stratify=y[idx_tv], random_state=seed)
+    return _assemble(df.iloc[idx_tr].copy(), df.iloc[idx_va].copy(), df.iloc[idx_te].copy(), "random")
 
 
 if __name__ == "__main__":
@@ -116,4 +114,4 @@ if __name__ == "__main__":
     print("kind:", s.split_kind)
     print("train/val/test:", s.X_train.shape, s.X_val.shape, s.X_test.shape)
     print("positive rates:", round(s.y_train.mean(), 3),
-          round(s.y_val.mean(), 3), round(s.y_test.mean(), 3))
+        round(s.y_val.mean(), 3), round(s.y_test.mean(), 3))

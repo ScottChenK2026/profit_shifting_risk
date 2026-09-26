@@ -12,13 +12,13 @@ extra capacity stopped buying anything.
 
 A few conventions, applied to all of them so the set reads as one:
 
-  * three models, three fixed colours, assigned once and never reused for anything else, so a
+1. three models, three fixed colours, assigned once and never reused for anything else, so a
     colour means the same model in every figure;
-  * marker shapes differ as well as colours, so the figures survive being printed in grey or read
+2. marker shapes differ as well as colours, so the figures survive being printed in grey or read
     by someone who is colour-blind;
-  * the grid is there to be measured against, not looked at, so it sits behind everything at low
+3. the grid is there to be measured against, not looked at, so it sits behind everything at low
     contrast;
-  * where a number is the point of the figure it is written on the figure, rather than left to be
+4. where a number is the point of the figure it is written on the figure, rather than left to be
     estimated off an axis.
 """
 
@@ -47,8 +47,7 @@ TEXT = "#0b0b0b"
 MUTED = "#52514e"
 
 
-def _style(ax, ylabel: str = "", xlabel: str = "", title: str = "",
-           grid_axis: str = "y") -> None:
+def _style(ax, ylabel: str = "", xlabel: str = "", title: str = "", grid_axis: str = "y") -> None:
     ax.set_axisbelow(True)
     ax.grid(axis=grid_axis, **GRID)
     for side in ("top", "right"):
@@ -76,9 +75,9 @@ def _save(fig, filename: str) -> None:
 def plot_ablation(deltas: pd.DataFrame, filename: str = "ablation_blocks.png") -> None:
     """How much test AUC each feature block is worth when it is removed from the full set.
 
-    Drawn as the drop rather than the remaining score because the drop is the claim. A tall bar for
-    the activity mix means the model cannot recover that information from anything else in the
-    data, which is the evidence the contribution argument needs and the thing SHAP could not show.
+    Drawn as the drop rather than the remaining score because the drop is the claim. A tall bar
+    means the model cannot recover that block's information from anything else in the data, which
+    is the evidence the contribution argument needs and the thing SHAP could not show.
     """
     blocks = list(dict.fromkeys(deltas["block"]))
     models = [m for m in MODEL_COLOURS if m in set(deltas["model"])]
@@ -118,8 +117,7 @@ def plot_ablation(deltas: pd.DataFrame, filename: str = "ablation_blocks.png") -
     _save(fig, filename)
 
 
-def plot_capacity(ladders: dict[str, pd.DataFrame],
-                  filename: str = "capacity_ladder.png") -> None:
+def plot_capacity(ladders: dict[str, pd.DataFrame], filename: str = "capacity_ladder.png") -> None:
     """The scale-up-then-regularise workflow, one column per architecture.
 
     The top row is the diagnostic: training loss and validation loss at each rung. While they move
@@ -130,8 +128,7 @@ def plot_capacity(ladders: dict[str, pd.DataFrame],
     exactly the misreading this figure exists to prevent.
     """
     names = [n for n in ("mlp", "ft_transformer") if n in ladders]
-    fig, axes = plt.subplots(2, len(names), figsize=(6.2 * len(names), 7),
-                             squeeze=False)
+    fig, axes = plt.subplots(2, len(names), figsize=(6.2 * len(names), 7), squeeze=False)
 
     for col, name in enumerate(names):
         tbl = ladders[name].reset_index(drop=True)

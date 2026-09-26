@@ -14,10 +14,10 @@ No single official list exists that everyone agrees on, so what I use is a best-
 country counts as a haven if it turns up on the well-known lists. I combined three sources to get
 reasonable coverage:
 
-  * the EU's lists of non-cooperative jurisdictions, both the blacklist and the grey watch list;
-  * the countries near the top of the Tax Justice Network's secrecy and corporate-tax-haven
+1. the EU's lists of non-cooperative jurisdictions, both the blacklist and the grey watch list;
+2. the countries near the top of the Tax Justice Network's secrecy and corporate-tax-haven
     rankings;
-  * the offshore financial centres identified by Garcia-Bernardo et al. (2017), "Uncovering
+3. the offshore financial centres identified by Garcia-Bernardo et al. (2017), "Uncovering
     Offshore Financial Centers", covering both the end destinations they call sinks and the big
     pass-through conduits.
 
@@ -116,17 +116,15 @@ def is_real_jurisdiction(code: str) -> bool:
 # The list above is a judgement call, and the write-up is candid that the whole project rests on
 # it. Two of the arguments against it are worth testing rather than just conceding.
 #
-# The first is that several European countries on the list are contested. The Netherlands,
-# Switzerland, Ireland and Singapore are conduits in Garcia-Bernardo et al. (2017) rather than end
-# destinations: real businesses operate there, and calling them havens is defensible but arguable.
+# The first is that several countries on the list are contested. The Netherlands, Switzerland,
+# Ireland and Singapore are conduits in Garcia-Bernardo et al. (2017) rather than end destinations:
+# real businesses operate there, and calling them havens is defensible but arguable.
 # CONTESTED_CONDUITS names them so src/label_sensitivity.py can drop them and see what changes.
 #
 # The second is that the list mixes two different things - the sinks where profit comes to rest and
 # the conduits it travels through. STRICT_SINKS keeps only the former, which is the narrowest
-# reading anyone would accept, and is the harder task because the obvious European cases are gone.
-# These are exactly the five conduits Garcia-Bernardo et al. (2017) name. The United Kingdom is
-# among them but never made it onto my haven list in the first place, which is itself a reminder
-# that the list embodies choices; the other four are on it and are the ones worth testing.
+# reading anyone would accept. It was expected to be the harder task, since the best-known conduits
+# are gone; in the event it scored almost exactly what the full list did.
 CONTESTED_CONDUITS: set[str] = {"NLD", "CHE", "IRL", "SGP", "GBR"}
 
 STRICT_SINKS: set[str] = TAX_HAVENS - CONTESTED_CONDUITS
@@ -136,9 +134,10 @@ def haven_set(variant: str = "baseline") -> set[str]:
     """Return the set of jurisdiction codes counted as havens under a given labelling.
 
     "baseline" is the combined list used throughout the main results. "strict_sinks" drops the
-    contested conduits. "conduits_only" keeps just those contested cases that appear on the baseline list, which is a deliberately
-    awkward variant: if the model can still separate them from ordinary countries, the activity mix
-    is picking up something about structure rather than merely re-learning the obvious cases.
+    contested conduits. "conduits_only" keeps just those contested cases that appear on the
+    baseline list, which is a deliberately awkward variant: if the model can still separate them
+    from ordinary countries, the activity mix is picking up something about structure rather than
+    merely re-learning the obvious cases.
     """
     if variant == "baseline":
         return set(TAX_HAVENS)

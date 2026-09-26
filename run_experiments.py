@@ -8,19 +8,19 @@ scores".
 the comparison mean something, and each study here exists because of a specific question the
 interim evaluation left open:
 
-    1. Ablation          - is the business-activity mix actually carrying the signal, or does SHAP
-                           only make it look that way?
-    2. Capacity ladder   - would a bigger or less regularised neural network have won? This is the
-                           scale-up-then-regularise workflow the project template asks for.
-    3. Learning curves   - is the neural models' deficit a sample-size problem?
-    4. Calibration       - is the neural models' poor Brier score a ranking failure or a scaling one?
-    5. Operating point   - what do the models look like when all four are held to the same review
-                           capacity instead of an arbitrary 0.5 cut-off?
-    6. Label sensitivity - how much of the result depends on my particular tax-haven list?
-    7. Hybrid score      - does the label-free autoencoder add anything to the supervised score?
-    8. Stability         - how wide is the uncertainty once rows about the same jurisdiction are
-                           treated as the correlated observations they are, and does performance
-                           hold up across years and reporting countries?
+    1. Ablation: is the business-activity mix actually carrying the signal, or does SHAP only make 
+                 it look that way?
+    2. Capacity ladder: would a bigger or less regularised neural network have won? This is the
+                        scale-up-then-regularise workflow the project template asks for.
+    3. Learning curves: is the neural models' deficit a sample-size problem?
+    4. Calibration: is the neural models' poor Brier score a ranking failure or a scaling one?
+    5. Operating point: what do the models look like when all four are held to the same review
+                        capacity instead of an arbitrary 0.5 cut-off?
+    6. Label sensitivity:how much of the result depends on my particular tax-haven list?
+    7. Hybrid score: does the label-free autoencoder add anything to the supervised score?
+    8. Stability: how wide is the uncertainty once rows about the same jurisdiction are treated as 
+                  the correlated observations they are, and does performance hold up across 
+                  reporting countries?
 
 Everything is written to ``outputs/metrics/experiments.json`` and the figures to
 ``outputs/figures``. Studies are cached individually, so a run that is interrupted or a study that

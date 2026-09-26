@@ -10,17 +10,19 @@ cannot beat XGBoost, that is an important finding in its own right.
 
 Gradient boosting means building lots of small decision trees one after another, each new tree
 concentrating on the mistakes the previous ones made, so the errors get whittled down step by step.
-To choose the settings I run a small grid search - every combination from a shortlist - judged by
-cross-validation, which rotates which slice of the data is held out so the score is not a fluke of
-one particular split. The haven imbalance is handled here by scale_pos_weight, XGBoost's version of
-the positive-class weight used in the neural models.
+
+To choose the settings I run a small grid search, trying every combination from a shortlist. Each
+combination is scored on the 2020 validation year, the same year the neural models use for early
+stopping, so all four models are selected against the same held-out data. When no validation set
+is supplied, as in the unit tests, the search falls back to cross-validation inside the training
+years. The haven imbalance is handled here by scale_pos_weight, XGBoost's version of the
+positive-class weight used in the neural models.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from sklearn.model_selection import (GridSearchCV, PredefinedSplit,
-                                     StratifiedKFold)
+from sklearn.model_selection import (GridSearchCV, PredefinedSplit, StratifiedKFold)
 from xgboost import XGBClassifier
 
 from config import RANDOM_SEED, XGB_PARAM_GRID
@@ -70,8 +72,7 @@ def train_xgboost(
         X_all = np.vstack([X_train, X_val])
         y_all = np.concatenate([y_train, y_val])
         fold = np.concatenate([np.full(len(y_train), -1), np.zeros(len(y_val))])
-        search = GridSearchCV(base, grid, scoring="roc_auc",
-                              cv=PredefinedSplit(fold), n_jobs=-1, refit=True)
+        search = GridSearchCV(base, grid, scoring="roc_auc", cv=PredefinedSplit(fold), n_jobs=-1, refit=True)
         search.fit(X_all, y_all)
         # refit=True retrains the winner on everything, training plus validation, which is what you
         # would want in deployment and keeps the data budget identical to the neural models: they

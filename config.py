@@ -1,12 +1,12 @@
 """
 config.py
 ---------
-Everything the rest of the project needs to be told: where the folders are, the random seed,
-which columns count as features, the model settings. One place to change things, so I am not
-hunting through five files when I want to try a different learning rate.
+Everything the rest of my project needs to be told: where the folders are, the random seed,
+which columns count as features, and the model settings, etc. One place to change things, so 
+I don't have to go through all files when I want to try a different learning rate.
 
-Paths are all worked out relative to this file, so the project runs on any machine without me
-pasting in absolute paths.
+Paths are all worked out relative to this file, so the project runs on any machine without the 
+need to change the paths.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ SYNTHETIC_DATA_FILENAME: str = "cbcr_synthetic.csv"
 # Reproducibility
 # --------------------------------------------------------------------------- #
 # Fixing the seed means anything random - shuffling, weight initialisation - comes out the same
-# every run, so the numbers in the report can actually be reproduced.
+# every run, so the numbers in my report can actually be reproduced.
 RANDOM_SEED: int = 42
 
 # --------------------------------------------------------------------------- #
@@ -81,9 +81,9 @@ TARGET_COLUMN: str = "tax_haven_binary"
 # --------------------------------------------------------------------------- #
 # Rather than shuffling all the rows and splitting at random, I train on the earlier years and
 # test on the latest one. It is closer to how the model would really be used - predicting a
-# future year from past ones - and it is a much tougher test. Shuffling lets near-identical rows
-# from the same year land in both train and test, which flatters the score. The random split
-# below survives only as a comparison for experiments.
+# future year from past ones - and it is a much tougher test. Shuffling lets the same country pair
+# from neighbouring years, with nearly identical figures, land in both train and test, which
+# flatters the score. The random split below survives only as a comparison for experiments.
 TRAIN_YEARS: list[int] = [2016, 2017, 2018, 2019]
 VAL_YEARS: list[int] = [2020]
 TEST_YEARS: list[int] = [2021]
@@ -173,7 +173,7 @@ BLOCK_LABELS: dict[str, str] = {
 # --------------------------------------------------------------------------- #
 # Capacity-and-regularisation study (the deep-learning workflow the template asks for)
 # --------------------------------------------------------------------------- #
-# CM3015 Project Idea 2 asks the student to "improve the chosen test metrics by network scaling up
+# CM3015 Project Idea 2 asks to "improve the chosen test metrics by network scaling up
 # and regularisation", following the workflow in Chollet (2018): get a model that can overfit
 # first, then fight the overfitting. These are the rungs of that ladder. Stage A grows capacity
 # with the regularisation switched off; stage B puts it back on, one mechanism at a time.
@@ -203,12 +203,12 @@ FT_CAPACITY_LADDER: list[dict] = [
 LEARNING_CURVE_FRACTIONS: list[float] = [0.1, 0.25, 0.5, 0.75, 1.0]
 
 # --------------------------------------------------------------------------- #
-# Audit capacity: what share of cases a reviewer can actually look at
+# Audit capacity: what share of cases a tax auditor can actually look at
 # --------------------------------------------------------------------------- #
-# The 0.5 cut-off is an arbitrary default that suits none of these models, because all four are
-# trained with the rare class weighted up. A reviewing team has a capacity instead, so the
-# threshold should be whatever puts that many cases in front of them. 10% is the working assumption
-# and src/calibration.py derives the matching cut-off from the validation year.
+# The 0.5 cut-off is an arbitrary default that suits none of these models, because the three
+# supervised ones are all trained with the rare class weighted up. A tax audit team has a capacity
+# instead, so the threshold should be whatever puts that many cases in front of them. 10% is the
+# working assumption and src/calibration.py derives the matching cut-off from the validation year.
 AUDIT_CAPACITY: float = 0.10
 
 # How many resamples the grouped bootstrap uses when putting a confidence interval around AUC.

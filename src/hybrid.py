@@ -5,23 +5,27 @@ Does the label-free model have anything to add to the labelled one?
 
 The autoencoder is in this project because the labels are a proxy. It is trained only on ordinary
 jurisdictions and never sees the haven flag, so whatever it finds is a property of the data rather
-than of my list. On its own it is much the weaker scorer, and the interim evaluation said so. But
+than of my list. On its own it is much the weaker scorer, and my interim evaluation said so. But
 weaker is not the same as redundant. A model that flags different rows for different reasons can
 still be worth having, and the interesting question is whether the supervised score and the anomaly
 score disagree in a useful way or merely in a noisy one.
 
 Two ways of putting them together, deliberately different in how much they assume:
 
-  * a rank average, which needs nothing fitted at all and simply says the two opinions count
-    equally. It is the version that would survive having no labels to tune on;
-  * a logistic stack fitted on the validation year, which learns how much to trust each score. It
+1. a rank average, which needs nothing fitted at all. Equal weights say the two opinions count
+    the same, and heavier weights on the supervised score are tried as well, so a poor result
+    cannot be blamed on the mixing ratio. It is the version that would survive having no labels to
+    tune on;
+2. a logistic stack fitted on the validation year, which learns how much to trust each score. It
     is the stronger method, at the cost of needing labels for the fitting step.
 
-Both are fitted or defined on the validation year and then applied unchanged to the test year.
+The stack is fitted on the validation year and applied unchanged to the test year. The best of all
+the combinations is then picked on the test year itself, which is generous to the hybrid - the
+right direction to lean for a test that expects a negative result.
 
-I should say plainly what I expect, because committing to it in advance is what makes the answer
+I should say plainly what I expect, because committing to it in advance is what makes my answer
 worth anything: given how far behind the autoencoder is, a gain looks unlikely, and the honest
-outcome is probably a small negative result. Reporting that is the point. The interim report framed
+outcome is probably a small negative result. Reporting that is my point. My interim report framed
 this as something to be tested rather than assumed, and an experiment that only gets written up if
 it succeeds is not an experiment.
 """
@@ -46,8 +50,7 @@ def _rank01(x: np.ndarray) -> np.ndarray:
     return (r - 1) / max(len(r) - 1, 1)
 
 
-def rank_average(p_supervised: np.ndarray, p_anomaly: np.ndarray,
-                 weight: float = 0.5) -> np.ndarray:
+def rank_average(p_supervised: np.ndarray, p_anomaly: np.ndarray, weight: float = 0.5) -> np.ndarray:
     """A weighted average of the two rank-transformed scores. weight=0.5 gives the two equal say."""
     return weight * _rank01(p_supervised) + (1 - weight) * _rank01(p_anomaly)
 

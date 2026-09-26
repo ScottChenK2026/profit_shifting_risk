@@ -14,16 +14,16 @@ measure as its own column.
 
 What it pulls out
 -----------------
-* The money figures, in USD: revenue split into total, within-group and outside, profit before
-  tax, an adjusted profit figure, tax paid and tax owed, share capital, accumulated earnings and
-  tangible assets.
-* The counts: employees, and how many groups, sub-groups and entities.
-* The office-activity counts - holding, internal group finance, IP, dormant, factories, sales,
-  services - which feed the activity-mix signals in features.py that I think are the novel part
-  of this project.
-* From the separate profit-makers and loss-makers breakdown, which the OECD calls PANELAI and
-  PANELAII, how much profit sits with profitable sub-groups versus loss-making ones. That becomes
-  the loss-parking signal.
+1. The money figures, in USD: revenue split into total, within-group and outside, profit before
+    tax, an adjusted profit figure, tax paid and tax owed, share capital, accumulated earnings and
+    tangible assets.
+2. The counts: employees, and how many groups, sub-groups and entities.
+3. The office-activity counts for all thirteen OECD activity types, from holding, internal group
+    finance, IP and dormant through to manufacturing, sales and services, which feed the
+    activity-mix signals in features.py that I think are the novel part of this project.
+4. From the separate profit-makers and loss-makers breakdown, which the OECD calls PANELAI and
+    PANELAII, how much profit sits with profitable sub-groups versus loss-making ones. That becomes
+    the loss-parking signal.
 
 How to run it
 -------------

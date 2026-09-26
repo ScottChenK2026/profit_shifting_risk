@@ -124,8 +124,8 @@ def load_artifacts(model_name: str = "best"):
         from models.ft_transformer import FTTransformer
         from config import FT_TRANSFORMER_CONFIG as ft_cfg
         model = FTTransformer(n_features=len(FEATURE_COLUMNS), d_token=ft_cfg["d_token"],
-                              n_heads=ft_cfg["n_heads"], n_layers=ft_cfg["n_layers"],
-                              dropout_p=ft_cfg["dropout_p"])
+                n_heads=ft_cfg["n_heads"], n_layers=ft_cfg["n_layers"],
+                dropout_p=ft_cfg["dropout_p"])
         model.load_state_dict(torch.load(MODEL_DIR / "ft_state.pt", map_location="cpu"))
         model.eval()
         return (lambda X: model.predict_proba(torch.from_numpy(X)).numpy()), scaler, medians, name
@@ -149,7 +149,7 @@ def score_frame(df_raw: pd.DataFrame, predict, scaler, medians) -> pd.DataFrame:
     probs = np.asarray(predict(X_scaled)).ravel()
 
     id_cols = [c for c in ("reporting_jurisdiction", "partner_jurisdiction", "year")
-               if c in feats.columns]
+            if c in feats.columns]
     result = feats[id_cols].copy() if id_cols else pd.DataFrame(index=feats.index)
     result["risk_score"] = probs.round(4)
     result["risk_band"] = [_band(p) for p in probs]
@@ -159,10 +159,13 @@ def score_frame(df_raw: pd.DataFrame, predict, scaler, medians) -> pd.DataFrame:
 def build_single_record(args: argparse.Namespace) -> pd.DataFrame:
     """Build a one-row CbCR frame out of the numbers passed on the command line.
 
-    Anything not supplied is left as NaN so the feature stage fills it with the training median,
-    which is the same treatment a genuinely missing value gets in training. The one exception is
-    accumulated earnings, which no feature currently uses and which is set to a placeholder only so
-    the column exists.
+    Arguments left out take the defaults set in main(): zero for related-party revenue, tax paid
+    and the establishment counts, and one for employees, entities, tangible assets and stated
+    capital, so the ratios stay defined. Tax accrued is the exception: left out, it stays missing
+    and the feature stage fills it with the training median, the same treatment a genuinely missing
+    value gets in training. Accumulated earnings is always missing, since no feature uses it and it
+    is there only so the column exists. The --real-establishments count is entered as
+    manufacturing, standing in for all real-activity establishments.
     """
     accrued = args.income_tax_accrued
     return pd.DataFrame([{

@@ -13,15 +13,16 @@ learned a reasonable ordering and then squashed it onto the wrong numbers. Fitti
 the validation year and re-measuring separates the two. If a one-parameter correction closes most
 of the gap, the ordering was fine all along and the Brier gap was mostly a presentation problem.
 
-The second is the threshold. Every model here is trained with the rare class weighted up, which
-pushes predicted probabilities higher across the board, so applying the textbook 0.5 cut-off to all
-four compares them at different points on their own curves. It flatters whichever model happens to
-be least confident. A reviewing team does not have a probability cut-off anyway - it has a capacity,
-some number of cases it can actually work through. So the honest thing is to fix the capacity, take
-the threshold that fills it on the validation year, and apply that to the test year.
+The second is the threshold. The three supervised models are trained with the rare class weighted
+up, which pushes their predicted probabilities higher across the board, so applying the textbook
+0.5 cut-off to all three compares them at different points on their own curves. It flatters
+whichever model happens to be least confident. A tax audit team does not have a probability
+cut-off anyway - it has a capacity, some number of cases it can actually work through. So the
+honest thing is to fix the capacity, take the threshold that fills it on the validation year, and
+apply that to the test year.
 
-Both corrections are fitted on the 2020 validation year and applied unchanged to 2021. Nothing here
-ever looks at the test labels.
+Both corrections are fitted on the 2020 validation year and applied unchanged to 2021. The test
+labels are used only to score the result, never to fit anything.
 """
 
 from __future__ import annotations
