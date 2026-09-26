@@ -284,10 +284,17 @@ def main() -> dict:
     for k in ("ft_transformer", "mlp", "xgboost", "autoencoder"):
         if k in metrics_all:
             m = metrics_all[k]
-            print(f"{pretty[k]:<16}{m['auc_roc']:>7.3f}{m['pr_auc']:>8.3f}"
-                  f"{m['f1']:>7.3f}{m['precision']:>7.3f}{m['recall']:>7.3f}"
+            # The autoencoder's score is a rescaled reconstruction error, not a probability, so a
+            # 0.5 cut-off on it means nothing. Its thresholded results are in autoencoder.json.
+            if k == "autoencoder":
+                thr = f"{'n/a':>7}{'n/a':>7}{'n/a':>7}"
+            else:
+                thr = f"{m['f1']:>7.3f}{m['precision']:>7.3f}{m['recall']:>7.3f}"
+            print(f"{pretty[k]:<16}{m['auc_roc']:>7.3f}{m['pr_auc']:>8.3f}{thr}"
                   f"{m['brier']:>8.3f}")
     print("================================================================")
+    print("F1, precision and recall use a 0.5 cut-off. The autoencoder's thresholded results "
+          "are in outputs/metrics/autoencoder.json.")
     print(f"Summary -> {METRIC_DIR / 'pipeline_summary.json'}")
     return summary
 

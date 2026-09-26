@@ -307,7 +307,7 @@ profit_shifting_risk/
 ├── run_pipeline.py           # resumable end-to-end training and evaluation
 ├── run_experiments.py        # the analysis studies
 ├── requirements.txt          # pinned package versions
-├── data/                     # converted OECD table (+ synthetic cache; raw export if downloaded)
+├── data/                     # converted OECD table (+ raw export, if downloaded)
 ├── outputs/                  # figures, metrics (JSON), trained models - created by the runs
 ├── src/
 │   ├── oecd_adapter.py       # raw OECD long CSV -> wide model table

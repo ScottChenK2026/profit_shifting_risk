@@ -28,7 +28,8 @@ is being reworked does not mean repeating the lot; ``--only NAME`` runs a single
 ``--fresh`` ignores the cache.
 
 Run time is roughly forty minutes on two CPU cores, dominated by the transformer, which gets
-retrained about thirty times across the ablation, the ladder and the curves.
+retrained about twenty-five times across the reference run, the ablation, the ladder, the curves
+and the label study.
 """
 
 from __future__ import annotations
@@ -46,8 +47,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-from config import (AUDIT_CAPACITY, METRIC_DIR, RANDOM_SEED,  # noqa: E402
-                    TARGET_COLUMN)
+from config import AUDIT_CAPACITY, METRIC_DIR, RANDOM_SEED     # noqa: E402
 import experiment_figures as figs                             # noqa: E402
 from ablation import ablation_deltas, run_ablation, run_learning_curve  # noqa: E402
 from calibration import calibration_report, capacity_comparison         # noqa: E402
